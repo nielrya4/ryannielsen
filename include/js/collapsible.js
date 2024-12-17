@@ -3,8 +3,7 @@ var i;
 
 for (i = 0; i < coll.length; i++) {
     coll[i].addEventListener("click", function() {
-        this.classList.add("collapsible")
-        this.classList.toggle("active");
+        this.classList.toggle("active_collapsible");
         var content = this.nextElementSibling;
         if (content.style.maxHeight){
             content.style.maxHeight = null;

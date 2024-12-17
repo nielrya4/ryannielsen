@@ -19,7 +19,7 @@
     float: right;
     margin-left: 5px;
 }
-.collapsible .active:after {
+.active_collapsible:after {
     content: "\2212";
 }
 .content {
