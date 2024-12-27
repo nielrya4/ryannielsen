@@ -20,6 +20,10 @@
 <body>
     
     
+    
+    
+    
+    
     <style>
 /* Desktop Navbar Styles */
 .navbar {
@@ -70,6 +74,10 @@
     background-color: #003d7a;
 }
 
+.mobile-links a.active {
+    background-color: #003d7a;
+}
+
 /* Mobile Navbar Styles */
 .navbar-toggle {
     display: none;
@@ -96,7 +104,7 @@
     padding-top: 10px;
     padding-left: 10px;
     padding-bottom: 10px;
-    padding-right: 440px;
+    padding-right: 80px;
     display: block;
     width:100%;
 }
@@ -104,9 +112,7 @@
 .mobile-links ul:hover li:hover a:hover {
     background-color: #004388;
 }
-
-/* Media Query for Mobile Devices */
-@media (max-width: 768px) {
+@media (max-width: 799px) {
     .navbar-links {
         display: none;
     }
@@ -120,19 +126,17 @@
         padding-left: 0;
     }
 }
-
-/* Media Query for Large Screens (to hide mobile links again) */
-@media (min-width: 769px) {
+@media (min-width: 800px) {
     .mobile-links ul {
-        display: none;  /* Hide mobile links */
+        display: none;
     }
 
     .navbar-links {
-        display: flex;  /* Show desktop links */
+        display: flex;
     }
 
     .navbar-toggle {
-        display: none;  /* Hide the mobile toggle button */
+        display: none;
     }
 }
 
@@ -144,28 +148,43 @@
             <a style="margin-left: 10px; margin-right: 20px; float: left !important;">Ryan Nielsen</a>
             <a style="margin-left: 10px; margin-right: 20px; float: left !important;">|</a>
             <ul>
-                <li><a href="/home">Home</a></li>
-                <li><a href="/about">About</a></li>
-                <li><a href="/services">Services</a></li>
-                <li><a href="/contact">Contact</a></li>
+                
+                    <li><a  href="/">Home</a></li>
+                
+                    <li><a  href="/pages/about/">About</a></li>
+                
+                    <li><a  href="/pages/publications">Publications</a></li>
+                
+                    <li><a  class="active"  href="/pages/software">Software</a></li>
+                
+                    <li><a  href="/pages/other_stuff">Other Stuff</a></li>
+                
+                    <li><a  href="/pages/contact">Contact</a></li>
                 
             </ul>
         </div>
 
-        <!-- Mobile Navigation (hidden by default) -->
         <div class="navbar-toggle mobile-nav">
             <a id="mobile-nav-toggle" style="cursor: pointer;" aria-label="Toggle navigation">
                 ☰
             </a>
         </div>
 
-        <!-- Mobile Links (hidden by default) -->
         <div class="mobile-links">
             <ul id="mobile-menu" style="display: none;">
-                <li><a href="/home">Home</a></li>
-                <li><a href="/about">About</a></li>
-                <li><a href="/services">Services</a></li>
-                <li><a href="/contact">Contact</a></li>
+                
+                    <li><a  href="/">Home</a></li>
+                
+                    <li><a  href="/pages/about/">About</a></li>
+                
+                    <li><a  href="/pages/publications">Publications</a></li>
+                
+                    <li><a  class="active"  href="/pages/software">Software</a></li>
+                
+                    <li><a  href="/pages/other_stuff">Other Stuff</a></li>
+                
+                    <li><a  href="/pages/contact">Contact</a></li>
+                
             </ul>
         </div>
     </div>
@@ -173,7 +192,6 @@
 
 
     <script>
-    // Toggle the mobile menu on button click
     document.getElementById('mobile-nav-toggle').addEventListener('click', function() {
         var menu = document.getElementById('mobile-menu');
         if (menu.style.display === 'none' || menu.style.display === '') {
@@ -183,15 +201,15 @@
         }
     });
 
-    // Listen for screen resize and adjust the mobile menu visibility accordingly
     window.addEventListener('resize', function() {
         var menu = document.getElementById('mobile-menu');
-        if (window.innerWidth > 768) {
-            // Hide mobile menu if screen width is greater than 768px
+        if (window.innerWidth > 799) {
             menu.style.display = 'none';
         }
     });
 </script>
+
+
 
 
     <div class="container main_panel">
@@ -199,7 +217,7 @@
             <div style="width:75%; display: block; margin-left: auto; margin-right: auto;">
                 <br />
                 
-                <p>Hello world! This is HTML5 Boilerplate.</p>
+    <p>Hello world!</p>
 
                 <br />
             </div>
