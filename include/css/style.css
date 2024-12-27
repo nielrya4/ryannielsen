@@ -3,6 +3,7 @@ html {
 }
 body {
     font-family: 'ubuntu', sans-serif;
+    width: 100vh
     background-color: #003060; /* For browsers that do not support gradients */
     background-image: linear-gradient(to bottom right, #69b1ff, #15420d);
     color: white;
