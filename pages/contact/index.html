@@ -72,13 +72,10 @@
             margin: 0;
             background-color: #333;
             display: none;
-            position: absolute;
-            top: 60px;
-            width: 100%;
         }
 
         .mobile-links ul li {
-            margin: 10px 0;
+            margin: 0;
         }
 
         .mobile-links ul li a {
@@ -86,6 +83,8 @@
             text-decoration: none;
             padding: 10px;
             display: block;
+            width: 100%;
+            text-align: left;
         }
 
         .mobile-links ul li a:hover {
@@ -100,14 +99,21 @@
 
             .navbar-toggle {
                 display: block;
+                background-color: #2c3133;
                 color: white;
-                font-size: 1.5rem;
                 padding: 14px 16px;
-                text-decoration: none;
+                font-size: 1.5rem;
+                border: none;
             }
 
             .mobile-links ul {
                 display: block;
+                width: 100%;
+            }
+
+            .mobile-links ul li a {
+                padding: 12px;
+                text-align: left;
             }
         }
     </style>
@@ -144,9 +150,11 @@
             
         </div>
 
-        <!-- Mobile Navigation Toggle (Hamburger Icon) -->
+        <!-- Mobile Navigation Toggle Button -->
         <div class="navbar-toggle mobile-nav">
-            <a href="#" id="mobile-nav-toggle" aria-label="Toggle navigation">☰</a>
+            <button id="mobile-nav-toggle" aria-label="Toggle navigation">
+                ☰
+            </button>
         </div>
 
         <!-- Mobile Navigation Links -->
@@ -194,8 +202,7 @@
     </div>
 
     <script>
-        document.getElementById('mobile-nav-toggle').addEventListener('click', function(e) {
-            e.preventDefault();  // Prevent the default anchor behavior
+        document.getElementById('mobile-nav-toggle').addEventListener('click', function() {
             var menu = document.getElementById('mobile-menu');
             if (menu.style.display === 'none') {
                 menu.style.display = 'block';
