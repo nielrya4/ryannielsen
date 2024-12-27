@@ -98,7 +98,7 @@
         display: block;
     }
 
-    .mobile-links ul {
+    .mobile-links ul li {
         display: none;
         padding-left: 0;
     }
@@ -107,10 +107,6 @@
 </style>
 <nav class="navbar">
     <div class="navbar-container">
-        <!-- Logo or Title -->
-        <a href="/" class="navbar-logo">MySite</a>
-
-        <!-- Desktop Navigation -->
         <div class="navbar-links desktop-nav">
             <ul>
                 <li><a href="/home">Home</a></li>
@@ -129,7 +125,7 @@
 
         <!-- Mobile Links (hidden by default) -->
         <div class="mobile-links">
-            <ul id="mobile-menu" style="display: none;">
+            <ul class="mobile-links" id="mobile-menu" style="display: none;">
                 <li><a href="/home">Home</a></li>
                 <li><a href="/about">About</a></li>
                 <li><a href="/services">Services</a></li>
