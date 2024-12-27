@@ -35,10 +35,12 @@
         top: 0;
         display: flex;
         align-items: center;
+        z-index: 1000;
     }
     .topnav .nav-links {
         display: flex;
         flex-grow: 1;
+        transition: max-height 0.3s ease-out;
     }
     .topnav .nav-links a {
         color: white;
@@ -125,7 +127,11 @@
 <script>
     function toggleMenu() {
         const navLinks = document.querySelector('.topnav .nav-links');
-        navLinks.classList.toggle('show');
+        if (navLinks) {
+            navLinks.classList.toggle('show');
+        } else {
+            console.error('Menu element not found!');
+        }
     }
 </script>
 <br />
