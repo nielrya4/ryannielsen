@@ -37,6 +37,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 0 10px;
+            z-index: 1000;
         }
 
         .topnav h4 {
@@ -79,7 +80,7 @@
                 right: 10px;
                 background-color: #2c3133;
                 border: 1px solid #444;
-                z-index: 1000;
+                width: auto;
             }
 
             .topnav .menu-items.show {
@@ -127,8 +128,9 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const hamburger = document.querySelector('.hamburger');
+            const menuItems = document.querySelector('.menu-items');
+
             hamburger.addEventListener('click', function () {
-                const menuItems = document.querySelector('.menu-items');
                 menuItems.classList.toggle('show');
             });
         });
