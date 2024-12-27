@@ -33,9 +33,7 @@
             width: 100%;
             left: 0;
             top: 0;
-            z-index: 1000;
         }
-
         .topnav a {
             float: left;
             color: white;
@@ -45,172 +43,50 @@
             padding: 14px 16px;
             text-decoration: none;
         }
-
         .topnav a.page:hover {
             background-color: #004388;
             color: white;
         }
-
         .topnav a.active {
             background-color: #003d7a;
             color: white;
         }
-
-        .topnav img {
+        .topnav img{
             height: calc(45*(0.5rem + 0.5vw)/17);
             width: calc(130*(0.5rem + 0.5vw)/17);
-        }
-
-        /* Mobile Navigation */
-        .navbar-toggle {
-            display: none;
-        }
-
-        .mobile-links ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            background-color: #333;
-            display: none;
-        }
-
-        .mobile-links ul li {
-            margin: 0;
-        }
-
-        .mobile-links ul li a {
-            color: white;
-            text-decoration: none;
-            padding: 10px;
-            display: block;
-            width: 100%;
-            text-align: left;
-        }
-
-        .mobile-links ul li a:hover {
-            background-color: #555;
-        }
-
-        /* Media Query for Mobile Devices */
-        @media (max-width: 768px) {
-            .topnav a {
-                display: none;
-            }
-
-            .navbar-toggle {
-                display: block;
-                background-color: #2c3133;
-                color: white;
-                padding: 14px 16px;
-                font-size: 1.5rem;
-                border: none;
-            }
-
-            .mobile-links ul {
-                display: block;
-                width: 100%;
-            }
-
-            .mobile-links ul li a {
-                padding: 12px;
-                text-align: left;
-            }
         }
     </style>
     <div class="topnav">
         <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left !important;">Ryan Nielsen</h4>
         <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left !important;">|</h4>
-
-        <!-- Desktop Navigation -->
-        <div class="navbar-links desktop-nav">
+        
             
-                
-                    <a  class="page"  href="/">Home</a>
-                
+                <a  class="page"  href="/">Home</a>
             
-                
-                    <a  class="page"  href="/pages/about/">About</a>
-                
+        
             
-                
-                    <a  class="page"  href="/pages/publications">Publications</a>
-                
+                <a  class="page"  href="/pages/about/">About</a>
             
-                
-                    <a  class="page active"  href="/pages/software">Software</a>
-                
+        
             
-                
-                    <a  class="page"  href="/pages/other_stuff">Other Stuff</a>
-                
+                <a  class="page"  href="/pages/publications">Publications</a>
             
-                
-                    <a  class="page"  href="/pages/contact">Contact</a>
-                
+        
             
-        </div>
-
-        <!-- Mobile Navigation Toggle Button -->
-        <div class="navbar-toggle mobile-nav">
-            <button id="mobile-nav-toggle" aria-label="Toggle navigation">
-                ☰
-            </button>
-        </div>
-
-        <!-- Mobile Navigation Links -->
-        <div class="mobile-links">
-            <ul id="mobile-menu">
-                
-                    
-                        <li>
-                            <a  class="page"  href="/">Home</a>
-                        </li>
-                    
-                
-                    
-                        <li>
-                            <a  class="page"  href="/pages/about/">About</a>
-                        </li>
-                    
-                
-                    
-                        <li>
-                            <a  class="page"  href="/pages/publications">Publications</a>
-                        </li>
-                    
-                
-                    
-                        <li>
-                            <a  class="active"  href="/pages/software">Software</a>
-                        </li>
-                    
-                
-                    
-                        <li>
-                            <a  class="page"  href="/pages/other_stuff">Other Stuff</a>
-                        </li>
-                    
-                
-                    
-                        <li>
-                            <a  class="page"  href="/pages/contact">Contact</a>
-                        </li>
-                    
-                
-            </ul>
-        </div>
+                <a  class="page active"  href="/pages/software">Software</a>
+            
+        
+            
+                <a  class="page"  href="/pages/other_stuff">Other Stuff</a>
+            
+        
+            
+                <a  class="page"  href="/pages/contact">Contact</a>
+            
+        
     </div>
-
-    <script>
-        document.getElementById('mobile-nav-toggle').addEventListener('click', function() {
-            var menu = document.getElementById('mobile-menu');
-            if (menu.style.display === 'none') {
-                menu.style.display = 'block';
-            } else {
-                menu.style.display = 'none';
-            }
-        });
-    </script>
+    <br />
+    <br />
 
 
 
