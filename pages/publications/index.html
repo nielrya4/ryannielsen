@@ -21,7 +21,7 @@
     
     
     <style>
-    /* Desktop Navbar Styles */
+/* Desktop Navbar Styles */
 .navbar {
     display: flex;
     justify-content: space-between;
@@ -103,6 +103,22 @@
         padding-left: 0;
     }
 }
+
+/* Media Query for Large Screens (to hide mobile links again) */
+@media (min-width: 769px) {
+    .mobile-links ul {
+        display: none;  /* Hide mobile links */
+    }
+
+    .navbar-links {
+        display: flex;  /* Show desktop links */
+    }
+
+    .navbar-toggle {
+        display: none;  /* Hide the mobile toggle button */
+    }
+}
+
 
 </style>
 <nav class="navbar">
