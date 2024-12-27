@@ -33,7 +33,6 @@
             width: 100%;
             left: 0;
             top: 0;
-            z-index: 1000; /* Ensure navbar is above other content */
         }
         .topnav a {
             float: left;
@@ -57,7 +56,7 @@
             width: calc(130*(0.5rem + 0.5vw)/17);
         }
 
-        /* Mobile menu styles */
+        /* Mobile Navbar Styles */
         .navbar-toggle {
             display: none;
         }
@@ -84,7 +83,7 @@
             background-color: #555;
         }
 
-        /* Responsive styles */
+        /* Media Query for Mobile Devices */
         @media (max-width: 768px) {
             .topnav a {
                 display: none;
@@ -92,11 +91,6 @@
 
             .navbar-toggle {
                 display: block;
-                color: white;
-                background-color: #333;
-                padding: 14px 16px;
-                cursor: pointer;
-                font-size: calc(0.5rem + 0.5vw);
             }
 
             .mobile-links ul {
@@ -105,11 +99,8 @@
             }
         }
 
+        /* Media Query for Large Screens (to hide mobile links again) */
         @media (min-width: 769px) {
-            .navbar-toggle {
-                display: none;
-            }
-
             .mobile-links ul {
                 display: none;
             }
@@ -117,48 +108,51 @@
             .topnav a {
                 display: inline-block;
             }
+
+            .navbar-toggle {
+                display: none;
+            }
         }
     </style>
 
     <div class="topnav">
-        <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left;">Ryan Nielsen</h4>
-        <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left;">|</h4>
+        <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left !important;">Ryan Nielsen</h4>
+        <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left !important;">|</h4>
 
-        <!-- Desktop Links -->
-        <div class="topnav-links">
+        
             
-                
-                    <a  class="page"  href="/">Home</a>
-                
+                <a  class="page"  href="/">Home</a>
             
-                
-                    <a  class="page active"  href="/pages/about/">About</a>
-                
+        
             
-                
-                    <a  class="page"  href="/pages/publications">Publications</a>
-                
+                <a  class="page active"  href="/pages/about/">About</a>
             
-                
-                    <a  class="page"  href="/pages/software">Software</a>
-                
+        
             
-                
-                    <a  class="page"  href="/pages/other_stuff">Other Stuff</a>
-                
+                <a  class="page"  href="/pages/publications">Publications</a>
             
-                
-                    <a  class="page"  href="/pages/contact">Contact</a>
-                
+        
             
+                <a  class="page"  href="/pages/software">Software</a>
+            
+        
+            
+                <a  class="page"  href="/pages/other_stuff">Other Stuff</a>
+            
+        
+            
+                <a  class="page"  href="/pages/contact">Contact</a>
+            
+        
+
+        <!-- Mobile Navigation Toggle Button -->
+        <div class="navbar-toggle">
+            <button id="mobile-nav-toggle" aria-label="Toggle navigation">
+                ☰
+            </button>
         </div>
 
-        <!-- Mobile Menu Toggle Button -->
-        <div class="navbar-toggle" id="mobile-nav-toggle">
-            ☰
-        </div>
-
-        <!-- Mobile Links -->
+        <!-- Mobile Links (hidden by default) -->
         <div class="mobile-links">
             <ul id="mobile-menu" style="display: none;">
                 
@@ -190,6 +184,9 @@
         </div>
     </div>
 
+    <br />
+    <br />
+
     <script>
         // Toggle the mobile menu on button click
         document.getElementById('mobile-nav-toggle').addEventListener('click', function() {
@@ -201,11 +198,12 @@
             }
         });
 
-        // Listen for window resize to hide the mobile menu on larger screens
+        // Listen for screen resize and adjust the mobile menu visibility accordingly
         window.addEventListener('resize', function() {
             var menu = document.getElementById('mobile-menu');
             if (window.innerWidth > 768) {
-                menu.style.display = 'none';  // Hide the mobile menu on large screens
+                // Hide mobile menu if screen width is greater than 768px
+                menu.style.display = 'none';
             }
         });
     </script>
