@@ -95,7 +95,7 @@
 
     <div class="topnav">
         <h4>Ryan Nielsen</h4>
-        <span class="hamburger">&#9776;</span>
+        <span class="hamburger" onclick="showMenu();">&#9776;</span>
         <div class="menu-items">
             
                 
@@ -126,14 +126,11 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
+        function showMenu() {
             const hamburger = document.querySelector('.hamburger');
             const menuItems = document.querySelector('.menu-items');
-
-            hamburger.addEventListener('click', function () {
-                menuItems.classList.toggle('show');
-            });
-        });
+            menuItems.classList.toggle('show');
+        }
     </script>
     <br />
     <br />
