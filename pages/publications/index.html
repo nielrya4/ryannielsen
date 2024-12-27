@@ -24,53 +24,77 @@
     
     
     
-    <style>
-        /* Global styles */
-        body {
-            margin: 0; /* Remove default margin */
-            padding-top: 60px; /* Adjust this value to match the height of the navbar */
-        }
+<style>
+    .topnav {
+        background-color: #2c3133;
+        overflow: hidden;
+        position: fixed;
+        font-size: calc(0.5rem + 0.5vw);
+        width: 100%;
+        left: 0;
+        top: 0;
+        display: flex;
+        align-items: center;
+    }
+    .topnav .nav-links {
+        display: flex;
+        flex-grow: 1;
+    }
+    .topnav .nav-links a {
+        color: white;
+        text-align: center;
+        max-width: 15%;
+        height: auto;
+        padding: 14px 16px;
+        text-decoration: none;
+    }
+    .topnav .nav-links a.page:hover {
+        background-color: #004388;
+        color: white;
+    }
+    .topnav .nav-links a.active {
+        background-color: #003d7a;
+        color: white;
+    }
+    .topnav .menu-icon {
+        display: none;
+        font-size: calc(1rem + 0.5vw);
+        color: white;
+        margin-right: 10px;
+        cursor: pointer;
+    }
+    .topnav h4 {
+        margin: 12px 10px;
+    }
 
-        .topnav {
+    /* Responsive Design */
+    @media screen and (max-width: 768px) {
+        .topnav .nav-links {
+            display: none;
+            flex-direction: column;
+            position: absolute;
             background-color: #2c3133;
-            overflow: hidden;
-            position: fixed;
-            font-size: calc(0.5rem + 0.5vw);
-            width: 100%;
+            top: 100%;
             left: 0;
-            top: 0;
-            z-index: 1030; /* Ensure it stays on top of other elements */
+            width: 100%;
         }
-
-        .topnav a {
-            float: left;
-            color: white;
-            text-align: center;
-            max-width: 15%;
-            height: auto;
-            padding: 14px 16px;
-            text-decoration: none;
+        .topnav .nav-links a {
+            text-align: left;
+            padding: 10px 20px;
         }
-
-        .topnav a.page:hover {
-            background-color: #004388;
-            color: white;
+        .topnav .menu-icon {
+            display: block;
         }
-
-        .topnav a.active {
-            background-color: #003d7a;
-            color: white;
-        }
-
-        .topnav img {
-            height: calc(45 * (0.5rem + 0.5vw) / 17);
-            width: calc(130 * (0.5rem + 0.5vw) / 17);
-        }
-    </style>
-
-    <div class="topnav">
-        <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left !important;">Ryan Nielsen</h4>
-        <h4 style="margin-left: 10px; margin-right: 20px; margin-top: 12px; float: left !important;">|</h4>
+    }
+    .topnav .nav-links.show {
+        display: flex;
+    }
+</style>
+<div class="topnav">
+    <h4>Ryan Nielsen</h4>
+    <h4>|</h4>
+    <span class="menu-icon" onclick="toggleMenu()">&#9776;</span>
+    <div class="nav-links">
         
             
                 <a  class="page"  href="/">Home</a>
@@ -97,8 +121,15 @@
             
         
     </div>
-    <br />
-    <br />
+</div>
+<script>
+    function toggleMenu() {
+        const navLinks = document.querySelector('.topnav .nav-links');
+        navLinks.classList.toggle('show');
+    }
+</script>
+<br />
+<br />
 
 
 
