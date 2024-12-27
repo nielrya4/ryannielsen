@@ -161,6 +161,26 @@
         }
     });
 </script>
+    <script>
+    // Toggle the mobile menu on button click
+    document.getElementById('mobile-nav-toggle').addEventListener('click', function() {
+        var menu = document.getElementById('mobile-menu');
+        if (menu.style.display === 'none' || menu.style.display === '') {
+            menu.style.display = 'block';
+        } else {
+            menu.style.display = 'none';
+        }
+    });
+
+    // Listen for screen resize and adjust the mobile menu visibility accordingly
+    window.addEventListener('resize', function() {
+        var menu = document.getElementById('mobile-menu');
+        if (window.innerWidth > 768) {
+            // Hide mobile menu if screen width is greater than 768px
+            menu.style.display = 'none';
+        }
+    });
+</script>
 
 
     <div class="container main_panel">
