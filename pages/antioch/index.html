@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antioch - Python DOM Library</title>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.js"></script>
+
+<!-- JavaScript libraries are loaded dynamically when imported -->
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f5f5f5;
+    padding: 20px;
+    margin: 0;
+}
+
+#loading {
+    text-align: center;
+    margin-top: 60px;
+}
+#content {
+    display: none;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 4px solid #ccc;
+    border-top-color: #037bfc;
+    animation: spin 1.2s linear infinite;
+    margin: auto;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+<div id="loading">
+    <div class="spinner"></div>
+    <p>Loading Antioch Library...</p>
+</div>
+<div id="content"></div>
+
+<script>
+async function initializeApp() {
+    try {
+        // Initialize Pyodide
+        const pyodide = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/" });
+        
+        // Load Pyodide packages first
+        const pyodidePackages = ['micropip'];
+        console.log('Loading Pyodide packages:', pyodidePackages);
+        await pyodide.loadPackage(pyodidePackages);
+
+        const pythonFiles = ['scripts/main.py'];
+        const assetFiles = ['assets/antioch-installer.sh', 'assets/styles.css'];
+        const antiochFiles = ['antioch/elements.py', 'antioch/dom.py', 'antioch/event_registry.py', 'antioch/events.py', 'antioch/__init__.py', 'antioch/event.py', 'antioch/core/filesystem.py', 'antioch/core/storage.py', 'antioch/core/__init__.py', 'antioch/core/async_storage.py', 'antioch/core/sync_queue.py', 'antioch/macros/storage_settings.py', 'antioch/macros/base.py', 'antioch/macros/window.py', 'antioch/macros/progressbar.py', 'antioch/macros/code_block.py', 'antioch/macros/datatable.py', 'antioch/macros/form.py', 'antioch/macros/download_link.py', 'antioch/macros/tabs.py', 'antioch/macros/webcanvas.py', 'antioch/macros/chartjs.py', 'antioch/macros/accordion.py', 'antioch/macros/js_library.py', 'antioch/macros/file_upload.py', 'antioch/macros/toast.py', 'antioch/macros/__init__.py', 'antioch/macros/js_library_example.py', 'antioch/macros/dropdown.py', 'antioch/macros/map.py', 'antioch/macros/sync_status.py', 'antioch/macros/file_select.py', 'antioch/macros/modal.py', 'antioch/macros/pagination.py', 'antioch/macros/slider.py', 'antioch/macros/toolbar.py', 'antioch/macros/window_manager.py', 'antioch/macros/counter.py', 'antioch/macros/alert.py', 'antioch/macros/canvas_macros/base.py', 'antioch/macros/canvas_macros/button.py', 'antioch/macros/canvas_macros/__init__.py', 'antioch/lib/loader.py', 'antioch/lib/__init__.py'];
+        const extraDirs = [];
+        const localPkgs = [];
+        const pypiPkgs = [];
+
+        // --- Create directories in Pyodide FS ---
+        console.log('Creating directories in Pyodide filesystem...');
+        
+        // Helper function to create directories recursively
+        function createDirectoryRecursive(path) {
+            const parts = path.split('/').filter(p => p);
+            let currentPath = '';
+            for (const part of parts) {
+                currentPath += '/' + part;
+                try {
+                    pyodide.FS.mkdir(currentPath);
+                    console.log(`Created directory: ${currentPath}`);
+                } catch (e) {
+                    // Directory already exists, ignore
+                }
+            }
+        }
+        
+        // Create base directories
+        createDirectoryRecursive("/antioch");
+        createDirectoryRecursive("/antioch/macros");
+        createDirectoryRecursive("/scripts");
+        createDirectoryRecursive("/assets");
+        
+        // Create all needed directories from Python files
+        const allFiles = [...pythonFiles, ...antiochFiles, ...assetFiles];
+        for (const file of allFiles) {
+            const dirPath = file.substring(0, file.lastIndexOf('/'));
+            if (dirPath && !dirPath.includes('..')) {
+                createDirectoryRecursive('/' + dirPath);
+            }
+        }
+
+        // Create additional directories
+        for(const d of extraDirs){
+            try{ 
+                pyodide.FS.mkdir(d); 
+                console.log(`Created directory: ${d}`);
+            }catch(e){ 
+                console.warn(`Directory ${d} already exists or could not be created`);
+            }
+        }
+
+        // --- Load files into FS ---
+        async function loadFiles(list, label){
+            console.log(`Loading ${label} files:`, list);
+            for(const f of list){
+                try {
+                    const content = await fetch(f).then(r=>r.text());
+                    pyodide.FS.writeFile("/"+f, content);
+                    console.log(`✓ Loaded ${f}`);
+                } catch(e){ 
+                    console.warn(`✗ Failed to load ${f}:`, e); 
+                }
+            }
+        }
+
+        // Load all Python files
+        await loadFiles(antiochFiles, 'antioch');
+        await loadFiles(pythonFiles, 'scripts');
+        await loadFiles(assetFiles, 'assets');
+
+        // --- Setup Python path ---
+        console.log('Setting up Python path...');
+        let pythonPathSetup = `
+import sys
+# Add core directories to Python path
+sys.path.insert(0, '/')
+sys.path.insert(0, '/antioch')
+sys.path.insert(0, '/antioch/macros')
+sys.path.insert(0, '/antioch/macros/canvas_macros')
+sys.path.insert(0, '/scripts')`;
+
+        // Add additional directories to Python path
+        for(const d of extraDirs){
+            pythonPathSetup += `\nsys.path.insert(0, '${d}')`;
+        }
+        
+        pythonPathSetup += `\nprint('Python path updated with:', sys.path[:8])`;
+        await pyodide.runPython(pythonPathSetup);
+
+        // --- Install local packages ---
+        if(localPkgs.length > 0) {
+            console.log('Installing local packages:', localPkgs);
+            for(const pkg of localPkgs){
+                try {
+                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${pkg}")`); 
+                    console.log(`✓ Installed local package: ${pkg}`);
+                } catch(e) {
+                    console.warn(`✗ Failed to install local package ${pkg}:`, e);
+                }
+            }
+        }
+
+        // --- Install PyPI packages ---
+        if(pypiPkgs.length > 0) {
+            console.log('Installing PyPI packages:', pypiPkgs);
+            for(const pkg of pypiPkgs){
+                try {
+                    await pyodide.runPythonAsync(`import micropip; await micropip.install("${pkg}")`); 
+                    console.log(`✓ Installed PyPI package: ${pkg}`);
+                } catch(e) {
+                    console.warn(`✗ Failed to install PyPI package ${pkg}:`, e);
+                }
+            }
+        }
+
+        // --- Execute main.py if exists ---
+        let mainScript = pythonFiles.includes('scripts/main.py')
+                        ? 'scripts/main.py'
+                        : (pythonFiles.includes('main.py') ? 'main.py' : null);
+
+        if(mainScript){
+            console.log(`Executing main script: ${mainScript}`);
+            const code = await fetch(mainScript).then(r=>r.text());
+            await pyodide.runPythonAsync(code);
+            console.log(`✓ Executed ${mainScript}`);
+        } else {
+            console.log('No main.py found, skipping execution');
+        }
+
+        // Hide loading and show content (if elements still exist)
+        const loadingEl = document.getElementById("loading");
+        const contentEl = document.getElementById("content");
+        
+        if (loadingEl) {
+            loadingEl.style.display = "none";
+        }
+        if (contentEl) {
+            contentEl.style.display = "block";
+        }
+        console.log('🎉 Application loaded successfully!');
+
+    } catch(err) {
+        console.error('💥 Error loading application:', err);
+        const loadingEl = document.getElementById("loading");
+        if (loadingEl) {
+            loadingEl.innerHTML =
+                `<div style="color:red; padding:20px;">
+                    <h3>Error loading application</h3>
+                    <p>${err.message}</p>
+                    <details><summary>Stack trace</summary><pre>${err.stack}</pre></details>
+                </div>`;
+        } else {
+            // If loading element doesn't exist, create error display in body
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML = 
+                `<div style="color:red; padding:20px;">
+                    <h3>Error loading application</h3>
+                    <p>${err.message}</p>
+                    <details><summary>Stack trace</summary><pre>${err.stack}</pre></details>
+                </div>`;
+            document.body.appendChild(errorDiv);
+        }
+    }
+}
+
+// Start loading when page is ready
+window.addEventListener("DOMContentLoaded", initializeApp);
+</script>
+</body>
+</html>
