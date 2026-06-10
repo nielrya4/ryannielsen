@@ -359,7 +359,7 @@ def create_counter_demo():
         "font-weight": "300"
     })
 
-    increment_btn = Button("Increment", style={
+    btn = Button("Click me!", style={
         "padding": "10px 20px",
         "margin": "5px",
         "font-size": "0.95rem",
@@ -372,92 +372,29 @@ def create_counter_demo():
         "transition": "background 0.2s ease"
     })
 
-    decrement_btn = Button("Decrement", style={
-        "padding": "10px 20px",
-        "margin": "5px",
-        "font-size": "0.95rem",
-        "background": "#555",
-        "color": "white",
-        "border": "none",
-        "border-radius": "4px",
-        "cursor": "pointer",
-        "font-weight": "500",
-        "transition": "background 0.2s ease"
-    })
-
-    reset_btn = Button("Reset", style={
-        "padding": "10px 20px",
-        "margin": "5px",
-        "font-size": "0.95rem",
-        "background": "#777",
-        "color": "white",
-        "border": "none",
-        "border-radius": "4px",
-        "cursor": "pointer",
-        "font-weight": "500",
-        "transition": "background 0.2s ease"
-    })
-
-    @when(increment_btn.events.click)
+    @when(btn.events.click)
     def increment(sender, event):
         nonlocal count
         count += 1
         display.set_text(f"Count: {count}")
 
-    @when(decrement_btn.events.click)
-    def decrement(sender, event):
-        nonlocal count
-        count -= 1
-        display.set_text(f"Count: {count}")
-
-    @when(reset_btn.events.click)
-    def reset(sender, event):
-        nonlocal count
-        count = 0
-        display.set_text(f"Count: {count}")
-
-    # Add hover effects
-    @when(increment_btn.events.mouseenter)
-    def on_increment_hover(sender, event):
+    # Add hover effect
+    @when(btn.events.mouseenter)
+    def on_hover(sender, event):
         sender.style.background = "#3a8eef"
 
-    @when(increment_btn.events.mouseleave)
-    def on_increment_leave(sender, event):
+    @when(btn.events.mouseleave)
+    def on_leave(sender, event):
         sender.style.background = "#4A9EFF"
-
-    @when(decrement_btn.events.mouseenter)
-    def on_decrement_hover(sender, event):
-        sender.style.background = "#666"
-
-    @when(decrement_btn.events.mouseleave)
-    def on_decrement_leave(sender, event):
-        sender.style.background = "#555"
-
-    @when(reset_btn.events.mouseenter)
-    def on_reset_hover(sender, event):
-        sender.style.background = "#888"
-
-    @when(reset_btn.events.mouseleave)
-    def on_reset_leave(sender, event):
-        sender.style.background = "#777"
 
     return Div(
         display,
-        Div(
-            increment_btn,
-            decrement_btn,
-            reset_btn,
-            style={
-                "display": "flex",
-                "gap": "10px",
-                "flex-wrap": "wrap",
-                "justify-content": "center"
-            }
-        ),
+        btn,
         style={
             "display": "flex",
             "flex-direction": "column",
-            "align-items": "center"
+            "align-items": "center",
+            "gap": "10px"
         }
     )
 
