@@ -8,7 +8,7 @@ import js
 from typing import Dict, List, Any, Optional, Callable
 from pyodide.ffi import to_js, create_proxy
 from .base import Macro
-from ..lib.loader import inject_script, inject_stylesheet, is_global_defined
+from ..lib.loader import inject_script, inject_script_async, inject_stylesheet, is_global_defined
 
 
 class JSLibraryMacro(Macro):
@@ -102,15 +102,32 @@ class JSLibraryMacro(Macro):
 
     def _load_dependencies(self) -> None:
         """Load all script and stylesheet dependencies."""
+        import asyncio
+
         deps = self._get_library_dependencies()
 
-        # Load stylesheets first
+        # Load stylesheets first (synchronously is fine)
         for stylesheet in deps.get('stylesheets', []):
             inject_stylesheet(stylesheet)
 
-        # Then load scripts
-        for script in deps.get('scripts', []):
-            inject_script(script)
+        # Load scripts sequentially to maintain order
+        scripts = deps.get('scripts', [])
+        if scripts:
+            # Set loading flag
+            self._set_state(scripts_loading=True)
+
+            # Start async task to load scripts sequentially
+            async def load_scripts_sequential():
+                try:
+                    for script in scripts:
+                        await inject_script_async(script)
+                finally:
+                    self._set_state(scripts_loading=False)
+
+            # Schedule the task
+            asyncio.ensure_future(load_scripts_sequential())
+        else:
+            self._set_state(scripts_loading=False)
 
     def _is_library_loaded(self) -> bool:
         """
