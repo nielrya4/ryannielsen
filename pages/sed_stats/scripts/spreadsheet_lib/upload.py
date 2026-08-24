@@ -1,10 +1,15 @@
 """File-picker widget that parses spreadsheet files into row dicts."""
 import js
 
-from antioch.elements import Button, Input, Span
+from antioch.elements import Input, Span
+from antioch.event import when
 from antioch.macros.base import Macro
+from component_lib.button import ButtonInfo
 
 from .importers import parse_file, SUPPORTED_EXTENSIONS
+
+STATUS_STYLE = {"margin-left": "10px", "font-size": "13px", "color": "#555"}
+ERROR_COLOR = "#b00020"
 
 
 class SpreadsheetUpload(Macro):
@@ -35,34 +40,64 @@ class SpreadsheetUpload(Macro):
         self._init_macro()
 
     def _create_elements(self):
-        container = self._create_container({"display": "inline-block"})
+        container = self._register_element(
+            'container', self._create_container({"display": "inline-block"})
+        )
 
+        # The native file input is unstyleable, so it stays hidden and the
+        # button forwards clicks to it.
         file_input = self._register_element(
             'file_input', Input('file', style={"display": "none"})
         )
         file_input.set_attribute("accept", self._get_state('accept'))
 
-        button = self._register_element('button', Button(self._get_state('label')))
-        status = self._register_element('status', Span("", style={"margin-left": "10px"}))
-
-        button._dom_element.addEventListener(
-            'click', self._create_proxy(lambda e: file_input._dom_element.click())
+        button = self._register_element(
+            'button', ButtonInfo(self._get_state('label'), size="small")
         )
-        file_input._dom_element.addEventListener(
-            'change', self._create_proxy(self._handle_file_change)
-        )
+        self._register_element('status', Span("", style=STATUS_STYLE))
 
-        container.add(file_input, button, status)
+        @when(button.events.click)
+        def on_click(sender, *args):
+            file_input._dom_element.click()
+
+        @when(file_input.events.change)
+        def on_change(sender, dom_event=None, *args):
+            self._handle_file_change(dom_event)
+
+        container.add(file_input, button, self._get_element('status'))
         return container
 
-    def _handle_file_change(self, event):
-        files = event.target.files
-        if files.length == 0:
+    # ------------------------------------------------------------------ status
+
+    def _set_status(self, message, is_error=False):
+        status = self._get_element('status')
+        status.set_text(message)
+        status.style.color = ERROR_COLOR if is_error else STATUS_STYLE["color"]
+
+    def _fail(self, message):
+        self._set_status(f"Error: {message}", is_error=True)
+        self._fire_event('error', str(message))
+
+    # ------------------------------------------------------------------ reading
+
+    def _handle_file_change(self, dom_event):
+        if dom_event is None:
             return
+        target = dom_event.target
+        files = target.files
+        if files is None or files.length == 0:
+            return
+
         file = files.item(0)
         filename = file.name
+        # csv is text; the binary formats have to come across as bytes.
         is_csv = filename.lower().endswith(".csv")
         reader = js.FileReader.new()
+
+        def reset():
+            # Clearing the value lets the same file be picked again and still
+            # fire `change`.
+            target.value = ""
 
         def handle_load(_evt):
             try:
@@ -71,15 +106,21 @@ class SpreadsheetUpload(Macro):
                 else:
                     content = bytes(js.Uint8Array.new(reader.result).to_py())
                 rows = parse_file(filename, content)
-                self._get_element('status').set_text(f"Loaded {len(rows)} rows from {filename}")
+                self._set_status(f"Loaded {len(rows)} rows from {filename}")
                 self._fire_event('data_loaded', rows, filename)
             except Exception as e:
-                self._get_element('status').set_text(f"Error: {e}")
-                self._fire_event('error', str(e))
-            # Reset so re-selecting the same file fires change again
-            event.target.value = ""
+                self._fail(e)
+            finally:
+                reset()
+
+        def handle_error(_evt):
+            self._fail(f"could not read {filename}")
+            reset()
 
         reader.onload = self._create_proxy(handle_load)
+        reader.onerror = self._create_proxy(handle_error)
+
+        self._set_status(f"Reading {filename}…")
         if is_csv:
             reader.readAsText(file)
         else:

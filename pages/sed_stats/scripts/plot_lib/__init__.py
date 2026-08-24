@@ -7,7 +7,7 @@ Components:
 """
 from .chart import PlotlyChart
 from .traces import (
-    bar_trace, line_trace, marker_trace, series_color,
+    bar_trace, line_trace, marker_trace, error_bar_trace, series_color,
     stacked_subplot_layout, subplot_axes, subplot_title,
 )
 from .export import charts_to_zip, download_bytes, safe_filename
@@ -17,6 +17,7 @@ __all__ = [
     'bar_trace',
     'line_trace',
     'marker_trace',
+    'error_bar_trace',
     'series_color',
     'stacked_subplot_layout',
     'subplot_axes',

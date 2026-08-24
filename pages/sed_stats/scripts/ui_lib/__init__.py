@@ -5,13 +5,14 @@ Components:
     TabView, TabItem    - tabs whose panels stay mounted (display-toggled)
     Wizard, WizardPanel - stepped options panel that generates on demand
     CheckboxGroup       - multi-select list with select-all/none
+    set_select_options  - repopulate a Select, keeping the current choice
     labeled             - label + control + hint form row
     Ribbon              - horizontal toolbar of tool buttons
     LoadingOverlay      - full-screen spinner for work that blocks the UI thread
 """
 from .tabs import TabView, TabItem
 from .wizard import Wizard, WizardPanel
-from .fields import CheckboxGroup, labeled
+from .fields import CheckboxGroup, labeled, set_select_options
 from .ribbon import Ribbon
 from .overlay import LoadingOverlay, next_frame
 
@@ -22,6 +23,7 @@ __all__ = [
     'WizardPanel',
     'CheckboxGroup',
     'labeled',
+    'set_select_options',
     'Ribbon',
     'LoadingOverlay',
     'next_frame',

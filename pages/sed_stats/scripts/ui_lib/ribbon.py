@@ -1,7 +1,8 @@
 """Toolbar of tool buttons, one per action."""
-from antioch.elements import Button, Div
+from antioch.elements import Div
+from antioch.event import when
 from antioch.macros.base import Macro
-
+from component_lib import ButtonInfo
 
 class Ribbon(Macro):
     """
@@ -36,12 +37,10 @@ class Ribbon(Macro):
         }))
 
     def add_tool(self, key, label):
-        button = Button(label, style={
-            "padding": "8px 16px", "border": "1px solid #ced4da",
-            "border-radius": "4px", "cursor": "pointer", "font-size": "14px",
-            "background-color": "#fff", "color": "#212529",
-        })
-        button.on_click(lambda e, k=key: self.select(k))
+        button = ButtonInfo(label, size="small", active=key == self._active)
+        @when(button.events.click)
+        def on_click(sender, *args):
+            self.select(key)
         self._buttons[key] = button
         self._get_element('container').add(button)
         return self
@@ -51,9 +50,6 @@ class Ribbon(Macro):
         self._active = key
         for tool_key, button in self._buttons.items():
             active = tool_key == key
-            button.style.background_color = "#0066cc" if active else "#fff"
-            button.style.color = "#fff" if active else "#212529"
-            button.style.border_color = "#0066cc" if active else "#ced4da"
         if key is not None:
             self._fire_event('select', key)
         return self

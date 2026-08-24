@@ -33,11 +33,23 @@ MDS_TYPES = {
     "metric": "Metric MDS",
 }
 
+# The mixture model scores a modelled curve against the sink, so it only takes
+# the metrics sed_stats.mixture knows how to evaluate in bulk.
+MIXTURE_METRICS = {
+    "cross_correlation": {"label": "Cross-correlation (R²)",
+                          "note": "higher is a better fit"},
+    "ks": {"label": "KS statistic", "note": "lower is a better fit"},
+    "kuiper": {"label": "Kuiper statistic", "note": "lower is a better fit"},
+}
+
+MIXTURE_TRIALS = [1000, 5000, 10000, 50000]
+
 # Ribbon buttons, in order. The keys tie a button to its Tool.
 TOOLS = {
     "distributions": "Distributions",
     "matrix": "Comparison matrices",
     "mds": "MDS",
+    "mixture": "Mixture model",
 }
 
 CHART_WIDTH = 760

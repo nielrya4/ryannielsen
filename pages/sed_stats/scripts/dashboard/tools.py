@@ -6,14 +6,20 @@ from antioch.elements import Div, Input, Option, Select
 from antioch.event import when
 from antioch.macros import Modal
 
-from ui_lib import CheckboxGroup, TabItem, TabView, Wizard, WizardPanel, labeled
+from ui_lib import (
+    CheckboxGroup, TabItem, TabView, Wizard, WizardPanel, labeled,
+    set_select_options,
+)
 
-from .config import LAYOUTS, METRICS, MDS_TYPES, TOOLS, VIEWS
+from .config import (
+    LAYOUTS, METRICS, MDS_TYPES, MIXTURE_METRICS, MIXTURE_TRIALS, TOOLS, VIEWS,
+)
 from .dataset import detect_columns, sample_names
 from .distributions import build_distribution
 from .errors import error_box
 from .matrices import build_matrix
 from .mds_plot import build_mds
+from .mixture import build_mixture
 
 MODAL_STYLE = {"max-width": "840px", "width": "92vw", "min-width": "0"}
 
@@ -28,7 +34,8 @@ class Tool:
     """
 
     def __init__(self, key, label, submit_text, option_rows, min_samples,
-                 build, read_extra, get_rows, gallery, overlay, on_close=None):
+                 build, read_extra, get_rows, gallery, overlay, on_close=None,
+                 sync_extra=None, validate_extra=None):
         self.key = key
         self.label = label
         self._min_samples = min_samples
@@ -38,6 +45,10 @@ class Tool:
         self._gallery = gallery
         self._overlay = overlay
         self._on_close = on_close
+        # Tools whose options depend on the data (a sink picker, say) refresh
+        # them here; validate_extra reports a problem the wizard should show.
+        self._sync_extra = sync_extra
+        self._validate_extra = validate_extra
 
         self._title_input = Input("text", placeholder=f"e.g. {label} of size",
                                   style={"width": "260px"})
@@ -104,8 +115,11 @@ class Tool:
     def sync_options(self, rows):
         """Keep the sample/dimension choices in step with the spreadsheet."""
         sample_col, _, dimensions = detect_columns(rows)
-        self._samples.set_options(sample_names(rows, sample_col))
+        names = sample_names(rows, sample_col)
+        self._samples.set_options(names)
         self._dimensions.set_options(dimensions)
+        if self._sync_extra:
+            self._sync_extra(names)
         return self
 
     def _current_bin_size(self):
@@ -132,6 +146,8 @@ class Tool:
                     f"{len(opts['samples'])} selected.")
         if not opts["dimensions"]:
             return "Select at least one dimension."
+        if self._validate_extra:
+            return self._validate_extra(opts)
         return None
 
     # ---------------------------------------------------------------- generation
@@ -258,6 +274,46 @@ def build_tools(get_rows, gallery, overlay, on_close=None):
             "mds_type": mds_type.value,
             "shepard": shepard._dom_element.checked,
         },
+        **shared,
+    )
+
+    # Mixture model
+    sink = Select()
+    mixture_metric = _select(MIXTURE_METRICS, lambda m: m["label"])
+    trials = Select(*[Option(f"{n:,}", value=str(n)) for n in MIXTURE_TRIALS])
+    trials.value = str(MIXTURE_TRIALS[2])
+
+    def validate_mixture(opts):
+        if not opts["sink"]:
+            return "Choose a sink sample."
+        if opts["sink"] not in opts["samples"]:
+            return f"The sink '{opts['sink']}' is not among the selected samples."
+        # The sink is one of the selected samples, so unmixing it needs two
+        # more alongside it.
+        if len(opts["samples"]) < 3:
+            return "Select the sink plus at least two source samples."
+        return None
+
+    tools["mixture"] = Tool(
+        "mixture", TOOLS["mixture"], "Create mixture model",
+        option_rows=[
+            labeled("Sink sample", sink,
+                    "The mixed sample; every other selected sample is a source"),
+            labeled("Comparison metric", mixture_metric,
+                    "Scores each trial's modelled curve against the sink"),
+            labeled("Trials", trials,
+                    "Random source configurations to try; more is slower but steadier"),
+        ],
+        min_samples=3,
+        build=build_mixture,
+        read_extra=lambda: {
+            "sink": sink.value,
+            "metric": mixture_metric.value,
+            "trials": int(trials.value),
+        },
+        sync_extra=lambda names: set_select_options(sink, names,
+                                                    empty_text="No samples"),
+        validate_extra=validate_mixture,
         **shared,
     )
     return tools

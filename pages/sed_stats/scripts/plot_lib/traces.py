@@ -84,6 +84,30 @@ def line_trace(x, y, name, color=None, markers=True):
     return trace
 
 
+def error_bar_trace(x, y, errors, name, color=None, size=9):
+    """Points with symmetric vertical error bars."""
+    trace = {
+        "type": "scatter",
+        "mode": "markers",
+        "x": list(x),
+        "y": list(y),
+        "name": name,
+        "error_y": {
+            "type": "data",
+            "array": [float(e) for e in errors],
+            "visible": True,
+            "thickness": 1.5,
+            "width": 6,
+        },
+    }
+    if color:
+        trace["marker"] = {"color": color, "size": size}
+        trace["error_y"]["color"] = color
+    else:
+        trace["marker"] = {"size": size}
+    return trace
+
+
 def marker_trace(x, y, name, color=None, labels=None, size=10):
     """Scatter points, optionally annotated with per-point text labels."""
     trace = {

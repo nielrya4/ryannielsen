@@ -1,5 +1,25 @@
 """Form field groups used to build wizard panels."""
-from antioch.elements import Div, Input, Label, Span
+from antioch.elements import Div, Input, Label, Option, Select, Span
+
+
+def set_select_options(select, values, empty_text="—"):
+    """
+    Replace a Select's options, keeping the current choice if it survives.
+
+    Mirrors CheckboxGroup.set_options: refreshing the spreadsheet should not
+    silently reset what the user picked.
+    """
+    previous = select.value
+    select.clear()
+    if not values:
+        select.add(Option(empty_text, value=""))
+        return select
+
+    for value in values:
+        select.add(Option(str(value), value=value))
+    if previous in [str(v) for v in values]:
+        select.value = previous
+    return select
 
 
 class CheckboxGroup:
