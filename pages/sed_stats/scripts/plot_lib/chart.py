@@ -2,6 +2,9 @@
 
 Plotly renders cartesian plots as real SVG in the DOM, so vector export is
 native rather than a rasterized canvas snapshot.
+
+Uses the `cartesian` bundle rather than `basic`: basic registers only bar, pie
+and scatter, and the bivariate density plots need heatmap.
 """
 import js
 
@@ -45,7 +48,7 @@ class PlotlyChart(JSLibraryMacro):
 
     def _get_library_dependencies(self):
         return {
-            'scripts': ['antioch/lib/vendor/plotly-basic.min.js'],
+            'scripts': ['antioch/lib/vendor/plotly-cartesian.min.js'],
             'stylesheets': [],
         }
 

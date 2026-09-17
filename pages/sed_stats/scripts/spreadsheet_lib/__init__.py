@@ -5,10 +5,12 @@ Components:
     TabulatorSheet    - editable data grid backed by the Tabulator JS library
     SpreadsheetUpload - file picker that parses csv/xls/xlsx into row dicts
     parse_file        - parse a filename + content pair into row dicts
+    rows_to_csv       - turn row dicts back into CSV text
 """
 from .grid import TabulatorSheet
 from .upload import SpreadsheetUpload
-from .importers import parse_file, parse_csv, parse_xls, parse_xlsx, SUPPORTED_EXTENSIONS
+from .importers import (parse_file, parse_csv, parse_xls, parse_xlsx,
+                        rows_to_csv, SUPPORTED_EXTENSIONS)
 
 __all__ = [
     'TabulatorSheet',
@@ -17,6 +19,7 @@ __all__ = [
     'parse_csv',
     'parse_xls',
     'parse_xlsx',
+    'rows_to_csv',
     'SUPPORTED_EXTENSIONS',
 ]
 

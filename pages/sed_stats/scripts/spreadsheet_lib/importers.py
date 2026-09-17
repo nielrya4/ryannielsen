@@ -55,3 +55,33 @@ def parse_file(filename: str, content):
     raise ValueError(
         f"Unsupported file type: {filename} (supported: {', '.join(SUPPORTED_EXTENSIONS)})"
     )
+
+def rows_to_csv(rows) -> str:
+    """
+    Turn row dicts back into CSV text.
+
+    The inverse of `parse_csv`, for handing the grid's contents to something
+    that wants a file. Column order follows the first row, with any key a later
+    row introduces appended, so a ragged set of rows still round-trips.
+    """
+    rows = list(rows)
+    if not rows:
+        return ""
+
+    headers = list(rows[0].keys())
+    seen = set(headers)
+    for row in rows[1:]:
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                headers.append(key)
+
+    buffer = io.StringIO()
+    # Excel and Sheets both expect CRLF, and csv defaults to it; asking for it
+    # explicitly keeps the output the same wherever this runs.
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(["" if row.get(h) is None else row.get(h, "")
+                         for h in headers])
+    return buffer.getvalue()

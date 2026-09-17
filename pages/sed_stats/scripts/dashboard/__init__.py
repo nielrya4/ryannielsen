@@ -8,7 +8,8 @@ Modules:
     plots        - chart construction shared by the builders
     distributions / matrices / mds_plot - one output builder each
     gallery      - the list of generated outputs
-    tools        - a wizard-in-a-modal per ribbon button
+    tools        - a wizard-in-a-modal per toolbar entry
+    drive        - Google sign-in, and Drive open/save
     shell        - the page frame
     errors       - rendering exceptions into the page
 """

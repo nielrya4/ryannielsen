@@ -21,7 +21,9 @@ _CSS = """
 
 
 def _ensure_css():
-    if js.document.getElementById(_SPINNER_CSS_ID) is None:
+    # Not `is None`: Pyodide represents JS null as a `jsnull` sentinel, so
+    # `is None` never matched and this re-injected the style on every call.
+    if not js.document.getElementById(_SPINNER_CSS_ID):
         style = js.document.createElement("style")
         style.id = _SPINNER_CSS_ID
         style.textContent = _CSS

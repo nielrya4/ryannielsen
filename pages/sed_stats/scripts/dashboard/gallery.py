@@ -1,7 +1,7 @@
 """The list of generated outputs, each downloadable and deletable."""
 import asyncio
 
-from antioch.elements import Button, Div, H3, P
+from antioch.elements import Button, Div, H3, P, Span
 from antioch.event import when
 
 from plot_lib import charts_to_zip, download_bytes, safe_filename
@@ -15,6 +15,10 @@ DELETE_STYLE = {
     "background-color": "#b00020", "color": "#fff", "border": "none",
     "padding": "5px 12px", "border-radius": "4px", "cursor": "pointer",
     "font-size": "13px",
+}
+SAVE_STATUS_STYLE = {
+    "font-size": "13px", "color": "#b00020", "margin-left": "8px",
+    "flex-basis": "100%",
 }
 CARD_STYLE = {
     "border": "1px solid #ddd", "border-radius": "8px",
@@ -30,7 +34,15 @@ class Gallery:
     when they become visible again and exported on demand.
     """
 
-    def __init__(self, empty_text="No graphs yet. Pick a tool above to make one."):
+    def __init__(self, empty_text="No graphs yet. Pick a tool above to make one.",
+                 on_save=None):
+        """
+        Args:
+            on_save: optional `async (filename, data, mime_type)` sink. When
+                given, each card grows a "Save to Drive" button alongside the
+                download; when None the button is left off entirely.
+        """
+        self._on_save = on_save
         self._entries = []
         self._empty = P(empty_text, style={"color": "#6c757d"})
         self._list = Div()
@@ -52,8 +64,15 @@ class Gallery:
 
         download = Button("Download SVG", style=DOWNLOAD_STYLE)
         delete = Button("Delete", style=DELETE_STYLE)
+        buttons = [download]
         if not charts:
             download.style.display = "none"
+
+        # The Drive panel's own status line lives in the Spreadsheet tab, so a
+        # failure here would otherwise be invisible from the Outputs tab.
+        save_status = Span("", style=SAVE_STATUS_STYLE)
+        if self._on_save and charts:
+            buttons.insert(1, self._save_button(entry, base_name, save_status))
 
         async def download_archive():
             try:
@@ -80,7 +99,8 @@ class Gallery:
         header = Div(
             H3(title, style={"font-size": "16px", "margin": "0",
                              "flex": "1", "min-width": "0"}),
-            Div(download, delete, style={"flex-shrink": "0"}),
+            Div(*buttons, delete, style={"flex-shrink": "0"}),
+            save_status,
             style={
                 "display": "flex", "align-items": "center", "gap": "10px",
                 "flex-wrap": "wrap", "margin-bottom": "10px",
@@ -92,6 +112,36 @@ class Gallery:
         self._list.add(entry["element"])
         self._sync_empty()
         return entry
+
+    def _save_button(self, entry, base_name, status):
+        """A "Save to Drive" twin of the download button."""
+        save = Button("Save to Drive", style=DOWNLOAD_STYLE)
+
+        async def upload():
+            try:
+                save.set_text("Saving…")
+                status.set_text("")
+                named = entry["charts"]
+                if len(named) == 1:
+                    await self._on_save(f"{base_name}.svg",
+                                        await named[0][1].to_svg(),
+                                        "image/svg+xml")
+                else:
+                    await self._on_save(f"{base_name}.zip",
+                                        await charts_to_zip(named),
+                                        "application/zip")
+            except Exception as error:
+                # Without this the failure escapes into the event loop and the
+                # user sees nothing but a button that went back to normal.
+                status.set_text(str(error))
+            finally:
+                save.set_text("Save to Drive")
+
+        @when(save.events.click)
+        def on_save(sender, *args):
+            asyncio.ensure_future(upload())
+
+        return save
 
     def _remove(self, entry):
         for _, chart in entry["charts"]:

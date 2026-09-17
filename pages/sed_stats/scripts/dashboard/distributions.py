@@ -4,7 +4,7 @@ from antioch.elements import Div, P
 from plot_lib import stacked_subplot_layout, subplot_axes, subplot_title
 
 from .config import VIEWS
-from .dataset import attribute_series
+from .dataset import find_uncertainty_column, series_for
 from .plots import distribution_traces, make_plot
 
 # Enough vertical room per subplot row to stay readable, plus title and axis.
@@ -13,9 +13,7 @@ STACK_CHROME = 90
 
 
 def build_distribution(charts, rows, sample_col, dimension, opts):
-    labels, series = attribute_series(
-        rows, sample_col, dimension, opts["view"], opts["bin_size"], opts["samples"]
-    )
+    labels, series = series_for(rows, sample_col, dimension, opts["view"], opts)
     if not series:
         return P(f"No data for '{dimension}'.", style={"color": "#6c757d"})
 
@@ -23,8 +21,36 @@ def build_distribution(charts, rows, sample_col, dimension, opts):
     title = f"{dimension} — {VIEWS[opts['view']]['label']}"
 
     if opts["layout"] == "overlay":
-        return _overlay(charts, labels, series, dimension, opts, title, y_title)
-    return _stacked(charts, labels, series, dimension, opts, title, y_title)
+        plot = _overlay(charts, labels, series, dimension, opts, title, y_title)
+    else:
+        plot = _stacked(charts, labels, series, dimension, opts, title, y_title)
+
+    note = _uncertainty_note(rows, dimension, opts)
+    return Div(note, plot) if note else plot
+
+
+def _uncertainty_note(rows, dimension, opts):
+    """Say so when the curve came from kernels rather than bins."""
+    if not rows or opts["view"] not in ("pdf", "cdf"):
+        return None
+
+    density = opts.get("density", "auto")
+    if density == "kde":
+        width = opts.get("bandwidth")
+        described = f"bandwidth {width:g}" if width else "a Silverman bandwidth"
+        text = f"Kernel density estimate using {described}."
+    elif density == "auto":
+        column, level = find_uncertainty_column(list(rows[0].keys()), dimension)
+        if column is None:
+            return None
+        stated = level or opts.get("sigma_in", 1.0)
+        text = (f"Each measurement spread by its uncertainty from '{column}' "
+                f"({stated:g}σ).")
+    else:
+        return None
+
+    return P(text, style={"font-size": "13px", "color": "#555",
+                          "margin": "0 0 6px 0"})
 
 
 def _overlay(charts, labels, series, dimension, opts, title, y_title):

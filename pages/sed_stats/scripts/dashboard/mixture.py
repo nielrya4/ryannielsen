@@ -1,15 +1,15 @@
 """The Mixture model tool's output: unmixing a sink sample into its sources."""
 import math
 
-from antioch.elements import Div, P, Table, Td, Th, Tr
+from antioch.elements import Div, P
 
 from plot_lib import error_bar_trace, line_trace
 from sed_stats import mixture
 
-from .config import CHART_WIDTH, MIXTURE_METRICS
-from .dataset import attribute_series
-from .matrices import CELL_STYLE, HEAD_STYLE
+from .config import MIXTURE_METRICS
+from .dataset import series_for
 from .plots import make_plot
+from .tables import result_table
 
 CAPTION_STYLE = {"font-size": "13px", "color": "#555", "margin": "0 0 6px 0"}
 
@@ -20,10 +20,8 @@ CONTRIBUTION_COLOR = "#8e5b42"
 
 def build_mixture(charts, rows, sample_col, dimension, opts):
     metric = opts["metric"]
-    labels, series = attribute_series(
-        rows, sample_col, dimension, mixture.expected_form(metric),
-        opts["bin_size"], opts["samples"]
-    )
+    labels, series = series_for(rows, sample_col, dimension,
+                                mixture.expected_form(metric), opts)
 
     sink_name = opts["sink"]
     sink = next((data for name, data in series if name == sink_name), None)
@@ -92,33 +90,31 @@ def _contribution_plot(charts, dimension, result):
     return Div(make_plot(
         charts, [trace], f"{dimension} — relative contribution",
         "Source sample", "% contribution",
-        show_legend=False,
+        height=460, show_legend=False,
         filename=f"{dimension}_mixture_contribution",
-        extra_layout={"xaxis": {"title": {"text": "Source sample"},
-                                "type": "category", "tickangle": -45}},
+        extra_layout={
+            "xaxis": {"title": {"text": "Source sample"},
+                      "type": "category", "tickangle": -45},
+            # Rotated sample names need room; the default 50px clipped them.
+            "margin": {"l": 60, "r": 20, "t": 50, "b": 150},
+        },
     ).element)
 
 
 def _contribution_table(metric, result):
-    header = Tr(
-        Th("Source", style=HEAD_STYLE),
-        Th(f"% contribution ({MIXTURE_METRICS[metric]['label']})", style=HEAD_STYLE),
-        Th("Standard deviation", style=HEAD_STYLE),
-    )
-    body_rows = []
-    for contribution in result.contributions:
-        value = contribution.contribution
-        deviation = contribution.standard_deviation
-        body_rows.append(Tr(
-            Th(contribution.name, style=HEAD_STYLE),
-            Td("n/a" if math.isnan(value) else f"{value:.2f}", style=CELL_STYLE),
-            Td("n/a" if math.isnan(deviation) else f"{deviation:.2f}", style=CELL_STYLE),
-        ))
-
+    body = [
+        [c.name,
+         "n/a" if math.isnan(c.contribution) else f"{c.contribution:.2f}",
+         "n/a" if math.isnan(c.standard_deviation)
+         else f"{c.standard_deviation:.2f}"]
+        for c in result.contributions
+    ]
     return Div(
         P("Relative contribution", style={**CAPTION_STYLE, "margin": "16px 0 6px 0"}),
-        Div(
-            Table(header, *body_rows, style={"border-collapse": "collapse"}),
-            style={"overflow-x": "auto", "max-width": f"{CHART_WIDTH}px"},
+        result_table(
+            ["Source",
+             f"% contribution ({MIXTURE_METRICS[metric]['label']})",
+             "Standard deviation"],
+            body,
         ),
     )

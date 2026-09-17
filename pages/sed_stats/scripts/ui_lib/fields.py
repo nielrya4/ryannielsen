@@ -30,10 +30,14 @@ class CheckboxGroup:
     if they still exist, so refreshing the spreadsheet doesn't reset choices.
     """
 
-    def __init__(self, options=None, all_checked=True, height="150px", empty_text="Nothing to choose"):
+    def __init__(self, options=None, all_checked=True, height="150px",
+                 empty_text="Nothing to choose", on_change=None):
         self._all_checked = all_checked
         self._empty_text = empty_text
         self._boxes = {}
+        # Called whenever the checked set changes, so callers can react to the
+        # selection (showing options that only apply to certain choices).
+        self.on_change = on_change
 
         self._list = Div(style={
             "max-height": height, "overflow-y": "auto",
@@ -71,6 +75,7 @@ class CheckboxGroup:
         for value in options:
             box = Input("checkbox", style={"margin-right": "8px"})
             box._dom_element.checked = previous.get(value, self._all_checked)
+            box.on('change', lambda e: self._changed())
             self._boxes[value] = box
             self._list.add(Div(
                 Label(box, Span(str(value)), style={
@@ -78,10 +83,17 @@ class CheckboxGroup:
                     "font-size": "13px", "padding": "2px 0", "cursor": "pointer",
                 }),
             ))
+        self._changed()
+
+    def _changed(self):
+        if self.on_change:
+            self.on_change(self.values())
 
     def set_all(self, checked):
         for box in self._boxes.values():
             box._dom_element.checked = checked
+        # Setting .checked in code does not fire a DOM change event.
+        self._changed()
 
     def values(self):
         return [value for value, box in self._boxes.items() if box._dom_element.checked]

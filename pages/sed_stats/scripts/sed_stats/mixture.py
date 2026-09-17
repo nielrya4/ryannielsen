@@ -52,15 +52,25 @@ class MixtureResult:
         metric        - the metric used
     """
 
-    def __init__(self, contributions, top_lines, top_scores, metric):
+    def __init__(self, contributions, top_lines, top_scores, metric,
+                 grid_shape=None):
         self.contributions = contributions
         self.top_lines = top_lines
         self.top_scores = top_scores
         self.metric = metric
+        # Set by the bivariate model: the (ny, nx) the flattened lines fold to.
+        self.grid_shape = grid_shape
 
     @property
     def best_score(self):
         return float(self.top_scores[0]) if len(self.top_scores) else float("nan")
+
+    @property
+    def top_grids(self):
+        """The winning trials folded back into density grids."""
+        if not self.grid_shape:
+            return []
+        return [line.reshape(self.grid_shape) for line in self.top_lines]
 
 
 def expected_form(metric: str) -> str:
@@ -190,3 +200,146 @@ def monte_carlo_model(sink_values, source_values, source_names=None,
         top_scores=all_scores[top_indices],
         metric=metric,
     )
+
+
+# ---------------------------------------------------------------- bivariate
+
+# The 2D measures of Sundell & Saylor (2021). Unlike the 1D table there is no
+# "form" column: a bivariate distribution is always a density grid, and the
+# CDF-based measures derive their own cumulative forms.
+METRICS_2D = {
+    "cross_correlation": True,   # higher is better
+    "ks": False,
+    "kuiper": False,
+}
+
+
+def _flatten_grid(distribution):
+    """A BivariateDistribution or 2-D array as (densities, shape)."""
+    grid = getattr(distribution, "densities", distribution)
+    grid = np.asarray(grid, dtype=float)
+    if grid.ndim != 2:
+        raise ValueError("Expected a 2-D density grid")
+    return grid.ravel(), grid.shape
+
+
+def _quadrant_stack(grid):
+    """Each of a grid's four quadrant CDFs, flattened into one row apiece."""
+    from .distributions.bivariate import quadrant_cdfs
+
+    return np.asarray([cdf.ravel() for cdf in quadrant_cdfs(grid)])
+
+
+def _score_models_2d(sink_grid, sink_quadrants, source_flat, source_quadrants,
+                     weights, metric):
+    """Score a block of trials without ever materializing a per-trial cumsum."""
+    models = weights @ source_flat
+
+    if metric == "cross_correlation":
+        return score_models(sink_grid, models, "cross_correlation")
+
+    # Cumulative summing is linear, so the quadrant CDF of a mixture is the
+    # same mixture of the sources' quadrant CDFs. Precomputing them once turns
+    # what would be four cumsums over the whole grid *per trial* into one more
+    # matmul, which is what makes 2D unmixing affordable at all.
+    best = None
+    for quadrant in range(sink_quadrants.shape[0]):
+        model_cdfs = weights @ source_quadrants[quadrant]
+        difference = sink_quadrants[quadrant] - model_cdfs
+        if metric == "ks":
+            values = np.abs(difference).max(axis=1)
+        else:  # kuiper
+            values = difference.max(axis=1) + (-difference).max(axis=1)
+        best = values if best is None else np.maximum(best, values)
+    return best
+
+
+def monte_carlo_model_2d(sink, sources, source_names=None,
+                         n_trials: int = DEFAULT_TRIALS,
+                         metric: str = "cross_correlation",
+                         n_top: int = TOP_TRIALS,
+                         seed=0) -> MixtureResult:
+    """
+    Top-down unmixing on bivariate density grids.
+
+    The same convex-mixture logic as the univariate model: a sink drawn from
+    several source populations has a density that is a weighted sum of theirs,
+    in two dimensions exactly as in one.
+
+    K-S and Kuiper cannot be had by flattening the grid and running the 1D
+    statistic — the cumulative sum would depend on whether you walked the grid
+    by rows or by columns. They use the four quadrant CDFs of Peacock (1983)
+    instead, as sed_stats.metrics_2d does.
+
+    Args:
+        sink: BivariateDistribution or 2-D array
+        sources: one per source, all on the sink's grid
+        source_names: labels; defaults to "Source 1", ...
+        metric: "cross_correlation", "ks", or "kuiper"
+
+    Returns:
+        MixtureResult whose top_lines are flattened grids; use `.top_grids`
+    """
+    if metric not in METRICS_2D:
+        raise ValueError(f"Unknown metric '{metric}'")
+
+    sink_flat, shape = _flatten_grid(sink)
+    flattened = []
+    for source in sources:
+        source_flat, source_shape = _flatten_grid(source)
+        if source_shape != shape:
+            raise ValueError("Sources and sink must share the same grid")
+        flattened.append(source_flat)
+    if not flattened:
+        raise ValueError("Need at least one source distribution")
+
+    source_flat = np.asarray(flattened)
+    n_sources = source_flat.shape[0]
+    if source_names is None:
+        source_names = [f"Source {i + 1}" for i in range(n_sources)]
+
+    sink_quadrants = np.zeros((0, sink_flat.size))
+    source_quadrants = np.zeros((0, n_sources, sink_flat.size))
+    if metric in ("ks", "kuiper"):
+        sink_quadrants = _quadrant_stack(sink_flat.reshape(shape))
+        source_quadrants = np.stack(
+            [_quadrant_stack(row.reshape(shape)) for row in source_flat], axis=1)
+
+    rng = np.random.default_rng(seed)
+    n_top = max(1, min(n_top, n_trials))
+
+    all_weights = np.empty((n_trials, n_sources))
+    all_scores = np.empty(n_trials)
+
+    block = max(1, min(n_trials, MAX_BLOCK_CELLS // max(sink_flat.size, 1)))
+    for start in range(0, n_trials, block):
+        stop = min(start + block, n_trials)
+        weights = random_configurations(stop - start, n_sources, rng)
+        all_weights[start:stop] = weights
+        all_scores[start:stop] = _score_models_2d(
+            sink_flat, sink_quadrants, source_flat, source_quadrants,
+            weights, metric)
+
+    best = METRICS_2D[metric]
+    ranked = np.where(np.isnan(all_scores),
+                      -np.inf if best else np.inf,
+                      all_scores)
+    order = np.argsort(ranked)
+    top_indices = order[::-1][:n_top] if best else order[:n_top]
+
+    top_weights = all_weights[top_indices]
+    contributions = [
+        Contribution(name,
+                     float(top_weights[:, i].mean() * 100),
+                     float(top_weights[:, i].std() * 100))
+        for i, name in enumerate(source_names)
+    ]
+
+    result = MixtureResult(
+        contributions=contributions,
+        top_lines=top_weights @ source_flat,
+        top_scores=all_scores[top_indices],
+        metric=metric,
+    )
+    result.grid_shape = shape
+    return result

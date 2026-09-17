@@ -17,6 +17,9 @@ class SpreadsheetUpload(Macro):
     Button that opens the browser file picker for csv/xls/xlsx files and
     fires a `data_loaded` event with the parsed rows.
 
+    Events: `load_start(filename)`, then either `data_loaded(rows, filename)`
+    or `error(message)`.
+
     Usage:
         upload = SpreadsheetUpload()
         DOM.add(upload.element)
@@ -34,6 +37,10 @@ class SpreadsheetUpload(Macro):
             accept=accept or ",".join(SUPPORTED_EXTENSIONS),
         )
 
+        # Fired once a file is actually being read, so the app can put a
+        # loading overlay up for the parse, which blocks the UI thread on a
+        # large workbook. Always followed by data_loaded or error.
+        self._create_event('load_start')
         self._create_event('data_loaded')
         self._create_event('error')
 
@@ -58,11 +65,19 @@ class SpreadsheetUpload(Macro):
 
         @when(button.events.click)
         def on_click(sender, *args):
-            file_input._dom_element.click()
+            try:
+                file_input._dom_element.click()
+            except Exception as error:
+                self._fail(error)
 
         @when(file_input.events.change)
         def on_change(sender, dom_event=None, *args):
-            self._handle_file_change(dom_event)
+            # antioch's Event.fire swallows handler exceptions into a print(),
+            # so anything raised here would leave the widget looking inert.
+            try:
+                self._handle_file_change(dom_event)
+            except Exception as error:
+                self._fail(error)
 
         container.add(file_input, button, self._get_element('status'))
         return container
@@ -82,10 +97,13 @@ class SpreadsheetUpload(Macro):
 
     def _handle_file_change(self, dom_event):
         if dom_event is None:
+            self._fail("no file event was delivered")
             return
         target = dom_event.target
         files = target.files
-        if files is None or files.length == 0:
+        # Not `is None`: Pyodide represents JS null as a `jsnull` sentinel,
+        # which is not Python None.
+        if not files or files.length == 0:
             return
 
         file = files.item(0)
@@ -121,6 +139,7 @@ class SpreadsheetUpload(Macro):
         reader.onerror = self._create_proxy(handle_error)
 
         self._set_status(f"Reading {filename}…")
+        self._fire_event('load_start', filename)
         if is_csv:
             reader.readAsText(file)
         else:

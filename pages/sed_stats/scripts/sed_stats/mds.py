@@ -7,10 +7,17 @@ to the caller so the same results can be rendered with any charting library.
 import numpy as np
 
 from . import metrics
+from .smacof import isotonic_regression, smacof
 
 # Metric key -> (function, distribution form it expects).
 # similarity/likeness/r2 measure similarity, so their dis_* complements are
 # used here; ks/kuiper are already distances and are used directly.
+# Restarts per fit. The first begins at the classical MDS solution and the
+# rest at random, guarding against a poor local minimum. Measured against
+# scikit-learn across metric and non-metric fits, eight already wins or ties
+# every case; sixteen doubles the time for an identical answer.
+MDS_RESTARTS = 8
+
 DISSIMILARITY_FUNCTIONS = {
     "similarity": (metrics.dis_similarity, "pdf"),
     "likeness": (metrics.dis_likeness, "pdf"),
@@ -73,31 +80,23 @@ def compute_mds(matrix: np.ndarray, non_metric: bool = True, random_state: int =
     `random_state` is pinned so the map stays put across re-renders rather
     than reshuffling every time a control changes.
     """
-    from sklearn.manifold import MDS
-
-    mds_result = MDS(
+    embedding, kruskal_stress = smacof(
+        matrix,
         n_components=2,
-        dissimilarity="precomputed",
         metric=(not non_metric),
-        normalized_stress=False,   # keep raw stress so we can normalize ourselves
-        n_init=10,                 # more random restarts -> more stable solution
+        n_init=MDS_RESTARTS,
         max_iter=1000,
         random_state=random_state,
     )
-    embedding = mds_result.fit_transform(matrix)
 
-    # Kruskal stress-1 (normalized), rather than sklearn's raw stress
+    # SMACOF fixes no absolute size — only the shape is determined — so the
+    # embedding is rescaled to sit on the same scale as the dissimilarities
+    # it came from. Uniform scaling leaves the topology untouched.
     upper = np.triu_indices_from(matrix, k=1)
-    denom = float(np.sum(matrix[upper] ** 2))
-    kruskal_stress = float(np.sqrt(mds_result.stress_ / denom)) if denom > 0 else 0.0
-
-    # sklearn normalizes the embedding to a fixed scale regardless of how
-    # dissimilar the samples are. Rescaling by (mean dissimilarity / spread)
-    # restores a meaningful axis scale without altering the topology.
-    mean_dissim = float(np.mean(matrix[upper])) if upper[0].size else 0.0
+    mean_dissimilarity = float(np.mean(matrix[upper])) if upper[0].size else 0.0
     spread = float(np.std(embedding))
-    if spread > 0 and mean_dissim > 0:
-        embedding = embedding * (mean_dissim / spread)
+    if spread > 0 and mean_dissimilarity > 0:
+        embedding = embedding * (mean_dissimilarity / spread)
 
     return embedding, kruskal_stress
 
@@ -147,9 +146,7 @@ def shepard_data(matrix: np.ndarray, embedding: np.ndarray, non_metric: bool = T
 
     disparities = None
     if non_metric and dissimilarities.size:
-        from sklearn.isotonic import IsotonicRegression
-
-        disparities = IsotonicRegression().fit_transform(dissimilarities, distances)
+        disparities = isotonic_regression(dissimilarities, distances)
 
     r2 = 0.0
     if dissimilarities.size > 1 and np.std(dissimilarities) > 0 and np.std(distances) > 0:

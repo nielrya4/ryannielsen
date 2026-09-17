@@ -7,7 +7,7 @@ from plot_lib import line_trace, marker_trace, series_color
 from sed_stats import mds
 
 from .config import METRICS, MDS_TYPES
-from .dataset import attribute_series
+from .dataset import series_for
 from .plots import make_plot
 
 CAPTION_STYLE = {"font-size": "13px", "color": "#555", "margin": "0 0 6px 0"}
@@ -15,10 +15,8 @@ CAPTION_STYLE = {"font-size": "13px", "color": "#555", "margin": "0 0 6px 0"}
 
 def build_mds(charts, rows, sample_col, dimension, opts):
     metric = opts["metric"]
-    _, series = attribute_series(
-        rows, sample_col, dimension, mds.expected_form(metric),
-        opts["bin_size"], opts["samples"]
-    )
+    _, series = series_for(rows, sample_col, dimension,
+                           mds.expected_form(metric), opts)
     if len(series) < 3:
         return P("Need at least three samples with data for MDS.",
                  style={"color": "#6c757d"})

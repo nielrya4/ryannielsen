@@ -7,13 +7,15 @@ Components:
     CheckboxGroup       - multi-select list with select-all/none
     set_select_options  - repopulate a Select, keeping the current choice
     labeled             - label + control + hint form row
-    Ribbon              - horizontal toolbar of tool buttons
+    Toolbar             - menu bar with nested dropdowns; hamburger on mobile
+    Ribbon              - horizontal strip of tool buttons (superseded by Toolbar)
     LoadingOverlay      - full-screen spinner for work that blocks the UI thread
 """
 from .tabs import TabView, TabItem
 from .wizard import Wizard, WizardPanel
 from .fields import CheckboxGroup, labeled, set_select_options
 from .ribbon import Ribbon
+from .toolbar import Toolbar
 from .overlay import LoadingOverlay, next_frame
 
 __all__ = [
@@ -25,6 +27,7 @@ __all__ = [
     'labeled',
     'set_select_options',
     'Ribbon',
+    'Toolbar',
     'LoadingOverlay',
     'next_frame',
 ]
