@@ -1,0 +1,57 @@
+{
+ "type": "FeatureCollection",
+ "crs": {
+  "type": "name",
+  "properties": {
+   "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Oxbow Field Area",
+    "source": "Oxbow field area boundary (oxbow_map project)",
+    "prepared_for": "City of Pocatello",
+    "prepared_on": "2026-08-26",
+    "area_acres": 104.59,
+    "area_hectares": 42.33
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -112.38701,
+       42.811899
+      ],
+      [
+       -112.369373,
+       42.799774
+      ],
+      [
+       -112.367514,
+       42.80082
+      ],
+      [
+       -112.370953,
+       42.802877
+      ],
+      [
+       -112.373624,
+       42.805058
+      ],
+      [
+       -112.378508,
+       42.810486
+      ],
+      [
+       -112.38701,
+       42.811899
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

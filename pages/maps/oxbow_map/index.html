@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Oxbow Field Area</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+
+    <!-- Handsontable CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.css">
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="static/styles.css">
+    <link rel="stylesheet" href="static/MultiSelect.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Oxbow Field Area</h1>
+        <p>Interactive map of iNaturalist plant observations and species status in the Oxbow field area, Pocatello, Idaho</p>
+    </div>
+
+    <div class="main-container">
+        <div class="actions-bar">
+            <div class="action-section">
+                <h3>Search & Filters</h3>
+                <div class="filter-group">
+                    <label>Species:</label>
+                    <div class="autocomplete-container">
+                        <input type="text" id="speciesSearch" placeholder="Search by scientific or common name..." oninput="handleSpeciesSearch()" autocomplete="off">
+                        <div id="speciesSuggestions" class="suggestions-dropdown" style="display: none;"></div>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <label>Status:</label>
+                    <select id="statusFilter" onchange="filterByStatus()">
+                        <option value="">All Statuses</option>
+                        <option value="Native">Native</option>
+                        <option value="Non-Native">Non-Native</option>
+                        <option value="Invasive">Invasive</option>
+                        <option value="Noxious">Noxious</option>
+                        <option value="Not Assessed">Not Assessed</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Quality Grade:</label>
+                    <select id="qualityFilter" onchange="filterByQuality()">
+                        <option value="">All Observations</option>
+                        <option value="research">Research Grade</option>
+                        <option value="needs_id">Needs ID</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Year Observed:</label>
+                    <input type="number" id="minYear" placeholder="From year" oninput="filterByYear()" onchange="filterByYear()">
+                    <input type="number" id="maxYear" placeholder="To year" oninput="filterByYear()" onchange="filterByYear()">
+                </div>
+                <button class="action-button secondary" onclick="clearFilters()">Clear All Filters</button>
+            </div>
+
+            <div class="action-section">
+                <h3>Legend</h3>
+                <div id="legend"></div>
+            </div>
+
+            <div class="action-section">
+                <h3>Export</h3>
+                <div class="filter-group">
+                    <label>Select exports:</label>
+                    <select id="exportSelect" data-multi-select data-select-all="false">
+                        <option value="visible-observations">Visible Observations (CSV)</option>
+                        <option value="species-summary">Species Summary (CSV)</option>
+                        <option value="field-area">Field Area Boundary (GeoJSON)</option>
+                        <option value="gis-package">GIS Package (ZIP)</option>
+                    </select>
+                </div>
+                <button class="action-button" onclick="handleMultipleExports()">Export Selected</button>
+            </div>
+
+            <div class="stats-box">
+                <h4>Dataset Statistics</h4>
+                <div class="stat-item">
+                    <span>Total Observations:</span>
+                    <span id="totalObservations">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span>Visible:</span>
+                    <span id="visibleObservations">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span>Taxa:</span>
+                    <span id="visibleTaxa">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span>Observed:</span>
+                    <span id="yearRange">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span>Field Area:</span>
+                    <span id="fieldArea">Loading...</span>
+                </div>
+                <div class="stat-item">
+                    <span>Data:</span>
+                    <span id="dataSource" class="data-source">Loading...</span>
+                </div>
+            </div>
+
+            <p class="data-note">
+                Observations fetched live from <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist</a>,
+                clipped to the field area boundary. Status follows the Idaho noxious weed rule (IDAPA 02.06.22)
+                and the project's species list.
+            </p>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+            <div id="mapLoading" class="map-loading"><span id="mapLoadingText">Loading...</span></div>
+        </div>
+
+        <div class="info-panel">
+            <h2>Observation Information</h2>
+            <div class="info-content" id="observationInfo">
+                <p class="no-selection">Click on an observation marker to view details</p>
+            </div>
+
+            <div class="data-table-container" id="tableContainer" style="display: none;">
+                <h3 id="tableTitle">Taxon Observations</h3>
+                <div id="observationTable"></div>
+                <button class="export-button" onclick="exportTaxonData()">Export Taxon Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- Handsontable JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/handsontable@14.1.0/dist/handsontable.full.min.js"></script>
+
+    <!-- MultiSelect JavaScript -->
+    <script src="static/MultiSelect.js"></script>
+
+    <!-- Custom JavaScript -->
+    <script src="static/inat.js"></script>
+    <script src="static/app.js"></script>
+</body>
+</html>
