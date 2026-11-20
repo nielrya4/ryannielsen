@@ -2,12 +2,18 @@
 Monte Carlo mixture (unmixing) model.
 
 Randomly weights the source samples, sums them into a model curve, scores that
-against the sink, and keeps the best-scoring configurations. The mean of those
-top configurations is the estimated relative contribution of each source, and
-their spread is the uncertainty.
+against the sink, and keeps the best-scoring configurations.
 
-Weights are drawn uniformly and normalized to sum to 1, so a configuration is
-always a full partition of the sink.
+Weights are drawn uniformly over every possible mixture (a flat Dirichlet), so
+each configuration is a full partition of the sink and lopsided mixtures (one
+source dominant, or one nearly absent) are tried as often as even ones.
+
+With `refine=True` (the default) the best configurations are then polished by
+constrained optimisation (SciPy's SLSQP, proportions in [0, 1] summing to 1),
+as DZmix's default "minimum function search" and detritalPy do, and the single
+best fit is the estimate. With `refine=False` the estimate is the mean of the
+top configurations, as in the Monte Carlo model of Sundell & Saylor (2017).
+Either way the spread of the top configurations is reported as the uncertainty.
 """
 import numpy as np
 
@@ -16,6 +22,8 @@ from . import metrics
 # metric -> (distribution form the metric expects, higher score is a better fit)
 METRICS = {
     "cross_correlation": ("pdf", True),
+    "likeness": ("pdf", True),
+    "similarity": ("pdf", True),
     "ks": ("cdf", False),
     "kuiper": ("cdf", False),
 }
@@ -47,17 +55,22 @@ class MixtureResult:
 
     Attributes:
         contributions - Contribution per source, in the order given
-        top_lines     - (TOP_TRIALS, n_bins) model curves of the best trials
+        top_lines     - (TOP_TRIALS, n_bins) model curves of the best trials;
+                        when refined, the optimised best fit is the first
         top_scores    - the metric value for each of those curves
         metric        - the metric used
+        refined       - whether the contributions are an optimised best fit
     """
 
     def __init__(self, contributions, top_lines, top_scores, metric,
-                 grid_shape=None):
+                 grid_shape=None, refined=False):
         self.contributions = contributions
         self.top_lines = top_lines
         self.top_scores = top_scores
         self.metric = metric
+        # True when contributions are an optimised best fit (whose curve and
+        # score come first in top_lines / top_scores) rather than a trial mean.
+        self.refined = refined
         # Set by the bivariate model: the (ny, nx) the flattened lines fold to.
         self.grid_shape = grid_shape
 
@@ -115,23 +128,104 @@ def score_models(sink: np.ndarray, models: np.ndarray, metric: str) -> np.ndarra
             correlation = np.where(denominator > 0, numerator / denominator, np.nan)
         return correlation ** 2
 
+    if metric == "similarity":
+        # metrics.similarity: sum of sqrt(sink * model) (Gehrels, 2000); 1 = identical.
+        return np.sqrt(np.clip(models, 0, None) * np.clip(sink, 0, None)).sum(axis=1)
+
+    if metric == "likeness":
+        # metrics.likeness: 1 - sum|sink - model| / 2 (Satkoski et al., 2013). For
+        # distributions that each sum to 1 this is 1 - Bray-Curtis dissimilarity: the share of
+        # the distribution the model already places correctly.
+        return 1 - np.abs(models - sink).sum(axis=1) / 2
+
     raise ValueError(f"Unknown metric '{metric}'")
 
 
 def random_configurations(n_trials: int, n_sources: int, rng) -> np.ndarray:
-    """`n_trials` weight vectors, each non-negative and summing to 1."""
-    weights = rng.random((n_trials, n_sources))
-    totals = weights.sum(axis=1, keepdims=True)
-    # A row of all zeros is astronomically unlikely, but it would divide by 0.
-    totals[totals == 0] = 1.0
-    return weights / totals
+    """
+    `n_trials` weight vectors, each non-negative and summing to 1, uniform over
+    all such vectors.
+
+    Normalizing independent uniforms instead would crowd the weights toward
+    1/n: with 10 sources, only about 0.5% of configurations would give any
+    source more than 30%, so a sink dominated by one source could not be found.
+    """
+    return rng.dirichlet(np.ones(n_sources), size=n_trials)
+
+
+def _refine(starts, misfit):
+    """
+    The lowest-misfit weights found by SLSQP from each of `starts`.
+
+    KS and Kuiper are maxima, so their misfit has many shallow local minima;
+    starting from every top configuration, and from equal weights, and keeping
+    the best end point makes the answer stable from run to run.
+    """
+    from scipy.optimize import minimize
+
+    def objective(weights):
+        value = misfit(weights)
+        return value if np.isfinite(value) else 1e12
+
+    n_sources = starts.shape[1]
+    best, best_value = starts[0], objective(starts[0])
+    for start in list(starts) + [np.full(n_sources, 1.0 / n_sources)]:
+        found = minimize(objective, start, method="SLSQP",
+                         bounds=[(0.0, 1.0)] * n_sources,
+                         constraints={"type": "eq", "fun": lambda w: 1.0 - np.sum(w)},
+                         options={"maxiter": 10000})
+        weights = np.clip(found.x, 0.0, None)
+        weights = weights / weights.sum()
+        value = objective(weights)
+        if value < best_value:
+            best, best_value = weights, value
+    return best
+
+
+def _summarize(all_weights, all_scores, higher, n_top, source_matrix,
+               score_one, source_names, metric, refine):
+    """Rank the trials, optionally refine the winners, and build the result."""
+    # A degenerate trial scores NaN; push those to the losing end rather than
+    # letting argsort's NaN-last convention make them look like winners.
+    ranked = np.where(np.isnan(all_scores),
+                      -np.inf if higher else np.inf,
+                      all_scores)
+    order = np.argsort(ranked, kind="stable")
+    top_indices = order[::-1][:n_top] if higher else order[:n_top]
+
+    top_weights = all_weights[top_indices]
+    top_scores = all_scores[top_indices]
+    spread = top_weights.std(axis=0) * 100
+
+    if refine:
+        sign = -1.0 if higher else 1.0
+        estimate = _refine(top_weights, lambda w: sign * score_one(w))
+        # The optimised fit leads the bundle; the next-best trials follow it.
+        line_weights = np.vstack([estimate, top_weights[1:]])
+        top_scores = np.concatenate([[score_one(estimate)], top_scores[1:]])
+    else:
+        estimate = top_weights.mean(axis=0)
+        line_weights = top_weights
+
+    contributions = [
+        Contribution(name, float(estimate[i] * 100), float(spread[i]))
+        for i, name in enumerate(source_names)
+    ]
+    return MixtureResult(
+        contributions=contributions,
+        top_lines=line_weights @ source_matrix,
+        top_scores=top_scores,
+        metric=metric,
+        refined=refine,
+    )
 
 
 def monte_carlo_model(sink_values, source_values, source_names=None,
                       n_trials: int = DEFAULT_TRIALS,
                       metric: str = "cross_correlation",
                       n_top: int = TOP_TRIALS,
-                      seed=0) -> MixtureResult:
+                      seed=0,
+                      refine: bool = True) -> MixtureResult:
     """
     Run the model.
 
@@ -140,10 +234,12 @@ def monte_carlo_model(sink_values, source_values, source_names=None,
         source_values: one curve per source, all on the sink's x grid
         source_names: labels for the sources; defaults to "Source 1", ...
         n_trials: how many random configurations to try
-        metric: "cross_correlation", "ks", or "kuiper"
-        n_top: how many of the best trials to average
+        metric: "cross_correlation", "likeness", "similarity", "ks", or "kuiper"
+        n_top: how many of the best trials to keep (and average, if not refining)
         seed: fixed by default so rebuilding a figure reproduces its numbers;
               pass None for a fresh draw each run
+        refine: polish the best trials by constrained optimisation and report
+                the single best fit, rather than the mean of the top trials
 
     Raises:
         ValueError: on an unknown metric, no sources, or ragged inputs
@@ -177,29 +273,11 @@ def monte_carlo_model(sink_values, source_values, source_names=None,
         all_weights[start:stop] = weights
         all_scores[start:stop] = score_models(sink, weights @ sources, metric)
 
-    best = higher_is_better(metric)
-    # A degenerate trial scores NaN; push those to the losing end rather than
-    # letting argsort's NaN-last convention make them look like winners.
-    ranked = np.where(np.isnan(all_scores),
-                      -np.inf if best else np.inf,
-                      all_scores)
-    order = np.argsort(ranked)
-    top_indices = order[::-1][:n_top] if best else order[:n_top]
+    def score_one(weights):
+        return float(score_models(sink, (weights @ sources)[None, :], metric)[0])
 
-    top_weights = all_weights[top_indices]
-    contributions = [
-        Contribution(name,
-                     float(top_weights[:, i].mean() * 100),
-                     float(top_weights[:, i].std() * 100))
-        for i, name in enumerate(source_names)
-    ]
-
-    return MixtureResult(
-        contributions=contributions,
-        top_lines=top_weights @ sources,
-        top_scores=all_scores[top_indices],
-        metric=metric,
-    )
+    return _summarize(all_weights, all_scores, higher_is_better(metric), n_top,
+                      sources, score_one, source_names, metric, refine)
 
 
 # ---------------------------------------------------------------- bivariate
@@ -209,6 +287,8 @@ def monte_carlo_model(sink_values, source_values, source_names=None,
 # CDF-based measures derive their own cumulative forms.
 METRICS_2D = {
     "cross_correlation": True,   # higher is better
+    "likeness": True,
+    "similarity": True,
     "ks": False,
     "kuiper": False,
 }
@@ -235,8 +315,9 @@ def _score_models_2d(sink_grid, sink_quadrants, source_flat, source_quadrants,
     """Score a block of trials without ever materializing a per-trial cumsum."""
     models = weights @ source_flat
 
-    if metric == "cross_correlation":
-        return score_models(sink_grid, models, "cross_correlation")
+    if metric in ("cross_correlation", "likeness", "similarity"):
+        # Both compare the flattened grids cell by cell (Sundell & Saylor 2021, eqs 17-18).
+        return score_models(sink_grid, models, metric)
 
     # Cumulative summing is linear, so the quadrant CDF of a mixture is the
     # same mixture of the sources' quadrant CDFs. Precomputing them once turns
@@ -258,7 +339,8 @@ def monte_carlo_model_2d(sink, sources, source_names=None,
                          n_trials: int = DEFAULT_TRIALS,
                          metric: str = "cross_correlation",
                          n_top: int = TOP_TRIALS,
-                         seed=0) -> MixtureResult:
+                         seed=0,
+                         refine: bool = True) -> MixtureResult:
     """
     Top-down unmixing on bivariate density grids.
 
@@ -275,7 +357,9 @@ def monte_carlo_model_2d(sink, sources, source_names=None,
         sink: BivariateDistribution or 2-D array
         sources: one per source, all on the sink's grid
         source_names: labels; defaults to "Source 1", ...
-        metric: "cross_correlation", "ks", or "kuiper"
+        metric: "cross_correlation", "likeness", "similarity", "ks", or "kuiper"
+        refine: polish the best trials by constrained optimisation (see
+                monte_carlo_model)
 
     Returns:
         MixtureResult whose top_lines are flattened grids; use `.top_grids`
@@ -320,26 +404,11 @@ def monte_carlo_model_2d(sink, sources, source_names=None,
             sink_flat, sink_quadrants, source_flat, source_quadrants,
             weights, metric)
 
-    best = METRICS_2D[metric]
-    ranked = np.where(np.isnan(all_scores),
-                      -np.inf if best else np.inf,
-                      all_scores)
-    order = np.argsort(ranked)
-    top_indices = order[::-1][:n_top] if best else order[:n_top]
+    def score_one(weights):
+        return float(_score_models_2d(sink_flat, sink_quadrants, source_flat,
+                                      source_quadrants, weights[None, :], metric)[0])
 
-    top_weights = all_weights[top_indices]
-    contributions = [
-        Contribution(name,
-                     float(top_weights[:, i].mean() * 100),
-                     float(top_weights[:, i].std() * 100))
-        for i, name in enumerate(source_names)
-    ]
-
-    result = MixtureResult(
-        contributions=contributions,
-        top_lines=top_weights @ source_flat,
-        top_scores=all_scores[top_indices],
-        metric=metric,
-    )
+    result = _summarize(all_weights, all_scores, METRICS_2D[metric], n_top,
+                        source_flat, score_one, source_names, metric, refine)
     result.grid_shape = shape
     return result

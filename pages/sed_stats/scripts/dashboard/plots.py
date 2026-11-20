@@ -1,12 +1,12 @@
 """Chart construction shared by the builders.
 
 `charts` is always the running list of (name, PlotlyChart) pairs for the output
-being built; the gallery uses it for resizing and for the SVG/zip export, so
+being built; the output window uses it for resizing and for the SVG/zip export, so
 every plot has to be registered there as it is made.
 """
-from plot_lib import PlotlyChart, bar_trace, line_trace, series_color
+from plot_lib import PlotlyChart
 
-from .config import CHART_WIDTH, VIEWS
+from .config import CHART_WIDTH
 
 
 def make_plot(charts, traces, title, x_title, y_title, height=420,
@@ -33,17 +33,3 @@ def make_plot(charts, traces, title, x_title, y_title, height=420,
     )
     charts.append((name, chart))
     return chart
-
-
-def distribution_traces(labels, series, view, offset=0, total=None):
-    """One trace per sample, colored by position in the overall series set."""
-    total = total or len(series)
-    chart_type = VIEWS[view]["chart_type"]
-    traces = []
-    for i, (sample, data) in enumerate(series):
-        color = series_color(offset + i, total)
-        if chart_type == "bar":
-            traces.append(bar_trace(labels, data, sample, color))
-        else:
-            traces.append(line_trace(labels, data, sample, color))
-    return traces

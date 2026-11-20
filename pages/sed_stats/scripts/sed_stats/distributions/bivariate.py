@@ -104,6 +104,24 @@ def _widths(uncertainties, count, floor):
     return np.where(np.isfinite(widths) & (widths > floor), widths, floor)
 
 
+def category_axis(n_categories: int):
+    """
+    The grid for a categorical axis: one point per category, at 0, 1, 2, ...
+
+    Categories have no distance between them, so this axis is never smoothed;
+    pass `None` as its uncertainty to `bivariate_density` and each grain lands
+    exactly on its own category's column.
+    """
+    if n_categories < 1:
+        raise ValueError("A categorical axis needs at least one category")
+    return np.arange(n_categories, dtype=float)
+
+
+def _onehot_matrix(centers, grid):
+    """(n_points, len(grid)) with a 1 where a measurement's category sits."""
+    return (centers[:, np.newaxis] == grid[np.newaxis, :]).astype(float)
+
+
 def _kernel_matrix(centers, widths, grid):
     """(n_points, len(grid)) of 1-D Gaussians, one row per measurement."""
     offsets = grid[np.newaxis, :] - centers[:, np.newaxis]
@@ -125,7 +143,9 @@ def bivariate_density(x, y, x_uncertainties, y_uncertainties,
     Args:
         x, y: paired measurements, same length
         x_uncertainties, y_uncertainties: per-measurement widths, or a scalar
-            bandwidth to use for every measurement
+            bandwidth to use for every measurement. None marks a categorical
+            axis: the values are positions from `category_axis` and each grain
+            counts wholly toward its own category.
         x_values, y_values: the shared grid axes
         sigma_floor: smallest usable width; defaults to half a grid step
 
@@ -155,15 +175,17 @@ def bivariate_density(x, y, x_uncertainties, y_uncertainties,
     else:
         x_floor = y_floor = max(float(sigma_floor), 1e-12)
 
-    x_widths = _widths(x_uncertainties, x.size, x_floor)
-    y_widths = _widths(y_uncertainties, y.size, y_floor)
+    x_widths = None if x_uncertainties is None else _widths(x_uncertainties, x.size, x_floor)
+    y_widths = None if y_uncertainties is None else _widths(y_uncertainties, y.size, y_floor)
 
     cells = max(x_values.size + y_values.size, 1)
     block = max(1, _BLOCK_CELLS // cells)
     for start in range(0, x.size, block):
         stop = min(start + block, x.size)
-        kernels_x = _kernel_matrix(x[start:stop], x_widths[start:stop], x_values)
-        kernels_y = _kernel_matrix(y[start:stop], y_widths[start:stop], y_values)
+        kernels_x = (_onehot_matrix(x[start:stop], x_values) if x_widths is None
+                     else _kernel_matrix(x[start:stop], x_widths[start:stop], x_values))
+        kernels_y = (_onehot_matrix(y[start:stop], y_values) if y_widths is None
+                     else _kernel_matrix(y[start:stop], y_widths[start:stop], y_values))
         # Row i of each holds that measurement's 1-D kernel; the matmul sums
         # every outer product at once.
         densities += kernels_y.T @ kernels_x

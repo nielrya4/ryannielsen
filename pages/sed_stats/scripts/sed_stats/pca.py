@@ -116,7 +116,7 @@ class GrainPCAResult:
 
 
 def grain_pca(matrix, variables=None, n_components: int = 2,
-              weights=None) -> GrainPCAResult:
+              weights=None, column_weights=None) -> GrainPCAResult:
     """
     Fit one PCA across every measurement, for use as a derived axis.
 
@@ -137,6 +137,11 @@ def grain_pca(matrix, variables=None, n_components: int = 2,
         weights: optional per-grain weight. Pass 1/n for each grain of a
             sample to stop a sample with many analyses from dominating the
             axis; the projection itself stays unweighted.
+        column_weights: optional per-variable multiplier applied after
+            standardizing. A categorical variable one-hot encoded into k
+            columns would otherwise outweigh a numeric one k to 1; giving each
+            of its columns 1/sqrt(k) makes the whole block count as one
+            variable.
 
     Raises:
         ValueError: with fewer than two grains or fewer than two variables
@@ -170,6 +175,11 @@ def grain_pca(matrix, variables=None, n_components: int = 2,
     scale = np.sqrt(variance)
     scale[scale <= 0] = 1.0  # a constant column carries nothing either way
     standardized = centered / scale
+    if column_weights is not None:
+        column_weights = np.asarray(column_weights, dtype=float)
+        if column_weights.shape[0] != n_variables:
+            raise ValueError("column_weights must be one per variable")
+        standardized = standardized * column_weights
 
     # The SVD is weighted; the projection is not, so every grain still lands at
     # its own honest position on the axis.
@@ -274,6 +284,32 @@ def pca_function(series, n_components: int = 2) -> PCAResult:
     mean = matrix.mean(axis=0)
     return _decompose(matrix - mean, [name for name, _ in series], mean,
                       n_components)
+
+
+def clr(matrix):
+    """
+    Centered log-ratio of rows of proportions.
+
+    Shares that sum to 1 carry one fewer degree of freedom than they have
+    entries, and an abundant category swamps a plain PCA. The log-ratio frees
+    them from the constant sum and works in relative terms. Zeros have no
+    logarithm, so each is replaced by half the smallest positive share before
+    the rows are renormalized.
+
+    Args:
+        matrix: (n_samples, n_categories), each row summing to 1
+
+    Raises:
+        ValueError: if no entry is positive
+    """
+    shares = np.asarray(matrix, dtype=float)
+    positive = shares[shares > 0]
+    if positive.size == 0:
+        raise ValueError("Need at least one positive share")
+    shares = np.where(shares > 0, shares, positive.min() / 2)
+    shares = shares / shares.sum(axis=1, keepdims=True)
+    logs = np.log(shares)
+    return logs - logs.mean(axis=1, keepdims=True)
 
 
 def combined_pca(blocks, sample_names, n_components: int = 2,

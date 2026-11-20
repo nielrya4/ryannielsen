@@ -100,6 +100,29 @@ class DriveClient:
             return name, await response.string()
         return name, await response.bytes()
 
+    async def download_text(self, file_id):
+        """A file's contents as text, whatever its type or extension."""
+        response = await self._fetch(
+            _bust(f"{API}/files/{file_id}?alt=media"), **_NO_CACHE)
+        return await response.string()
+
+    async def list_files(self, query, limit=50):
+        """
+        Files matching a Drive search `query`, most recently modified first.
+
+        Under `drive.file` this only ever sees files the app created or the
+        user picked for it, so it is a search of the app's own files, not of
+        the whole Drive.
+
+        Returns [{"id", "name", "modifiedTime"}, ...]
+        """
+        url = (f"{API}/files?q={js.encodeURIComponent(query)}"
+               f"&orderBy={js.encodeURIComponent('modifiedTime desc')}"
+               f"&pageSize={int(limit)}"
+               f"&fields={js.encodeURIComponent('files(id,name,modifiedTime)')}")
+        response = await self._fetch(_bust(url), **_NO_CACHE)
+        return (await response.json()).get("files", [])
+
     async def metadata(self, file_id):
         response = await self._fetch(
             _bust(f"{API}/files/{file_id}?fields=id,name,mimeType,modifiedTime"),
@@ -138,6 +161,24 @@ class DriveClient:
             method="POST",
             headers={"Content-Type": f"multipart/related; boundary={boundary}"},
             body=_as_js_bytes(body),
+        )
+        return await response.json()
+
+
+    async def update(self, file_id, content, mime_type="text/csv"):
+        """
+        Replace an existing file's contents and return its metadata.
+
+        Allowed under `drive.file` for files the app created and files the
+        user picked for it. The name and location are left alone.
+        """
+        data = content.encode() if isinstance(content, str) else content
+        response = await self._fetch(
+            f"{UPLOAD}/files/{file_id}?uploadType=media"
+            f"&fields=id,name,modifiedTime",
+            method="PATCH",
+            headers={"Content-Type": mime_type},
+            body=_as_js_bytes(data),
         )
         return await response.json()
 

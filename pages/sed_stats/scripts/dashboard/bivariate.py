@@ -5,12 +5,14 @@ Shared by the three bivariate tools: the density plots, the comparison
 matrices and the MDS map all start from the same per-sample grids, which must
 sit on one common axis pair for the 2D measures to mean anything.
 """
-from antioch.elements import P
 
-from sed_stats.distributions.bivariate import axis_grid, bivariate_density
+from plot_lib import heatmap_trace
+from sed_stats.distributions.bivariate import axis_grid, bivariate_density, category_axis
 from sed_stats.distributions.numeric import silverman_bandwidth
 
-from .dataset import paired_by_sample
+from workflow_lib import NodeProblem
+
+from .dataset import categories_of, is_numeric_column, paired_by_sample
 
 NOTE_STYLE = {"color": "#6c757d"}
 
@@ -30,10 +32,13 @@ class BivariateSet:
                              each axis's kernel widths
         x_bandwidth, y_bandwidth - the KDE widths, when they did not
         counts     - {sample: number of paired measurements}
+        x_categories, y_categories - the category names along an axis that is
+                             categorical (positions 0, 1, 2, ...), else None
     """
 
     def __init__(self, entries, x_values, y_values, used_uncertainties,
-                 x_bandwidth, y_bandwidth, counts):
+                 x_bandwidth, y_bandwidth, counts,
+                 x_categories=None, y_categories=None):
         self.entries = entries
         self.x_values = x_values
         self.y_values = y_values
@@ -41,62 +46,101 @@ class BivariateSet:
         self.x_bandwidth = x_bandwidth
         self.y_bandwidth = y_bandwidth
         self.counts = counts
+        self.x_categories = x_categories
+        self.y_categories = y_categories
 
     def __len__(self):
         return len(self.entries)
 
     @property
+    def categorical(self):
+        return self.x_categories is not None or self.y_categories is not None
+
+    @property
     def method_note(self):
         """How each axis was smoothed — they can differ."""
-        use_x, use_y = self.used_uncertainties
-        if use_x and use_y:
-            return "each grain spread by its own analytical uncertainty (PDP)"
-        if not use_x and not use_y:
-            return (f"KDE, bandwidths {self.x_bandwidth:.3g} (x) "
-                    f"and {self.y_bandwidth:.3g} (y)")
-        if use_x:
-            return (f"x from each grain's own uncertainty, "
-                    f"y by KDE at bandwidth {self.y_bandwidth:.3g}")
-        return (f"x by KDE at bandwidth {self.x_bandwidth:.3g}, "
-                f"y from each grain's own uncertainty")
+        if not self.categorical:
+            use_x, use_y = self.used_uncertainties
+            if use_x and use_y:
+                return "each grain spread by its own analytical uncertainty (PDP)"
+            if not use_x and not use_y:
+                return (f"KDE, bandwidths {self.x_bandwidth:.3g} (x) "
+                        f"and {self.y_bandwidth:.3g} (y)")
+        parts = []
+        for axis, categories, used, bandwidth in (
+                ("x", self.x_categories, self.used_uncertainties[0], self.x_bandwidth),
+                ("y", self.y_categories, self.used_uncertainties[1], self.y_bandwidth)):
+            if categories is not None:
+                parts.append(f"{axis} counted per category, unsmoothed")
+            elif used:
+                parts.append(f"{axis} from each grain's own uncertainty")
+            else:
+                parts.append(f"{axis} by KDE at bandwidth {bandwidth:.3g}")
+        return ", ".join(parts)
+
+    def order_warning(self, metric):
+        """A caveat for the metrics that read an axis as ordered, or None."""
+        if self.categorical and metric in ("ks", "kuiper"):
+            return ("Note: this metric accumulates along each axis, and "
+                    "categories have no natural order — the result depends on "
+                    "their alphabetical order here. Likeness or similarity "
+                    "compare category by category and do not.")
+        return None
+
+    def axis_layout(self, x_title, y_title):
+        """Plotly axis settings: category names as ticks on a categorical axis."""
+        def axis(title, categories):
+            layout = {"title": {"text": title}, "rangemode": "normal"}
+            if categories is not None:
+                layout.update({
+                    "tickmode": "array",
+                    "tickvals": list(range(len(categories))),
+                    "ticktext": list(categories),
+                    "range": [-0.5, len(categories) - 0.5],
+                })
+            return layout
+        return {"xaxis": axis(x_title, self.x_categories),
+                "yaxis": axis(y_title, self.y_categories)}
+
+    def heatmap(self, grid, **kwargs):
+        """A heatmap on this set's axes, unsmoothed across categories."""
+        trace = heatmap_trace(
+            self.x_values, self.y_values,
+            grid.tolist() if hasattr(grid, "tolist") else grid, **kwargs)
+        if self.categorical:
+            # Interpolating between "quartz" and "feldspar" invents a mineral.
+            trace["zsmooth"] = False
+        return trace
 
 
-def prepare(rows, sample_col, y_dimension, opts, min_samples=1, purpose="compare"):
+def prepare_set(rows, sample_col, y_dimension, opts, min_samples=1,
+                purpose="compare"):
     """
-    The density set for one y dimension, or a note explaining why there isn't one.
+    The density set for one y dimension.
 
-    Every bivariate tool needs the same four checks, and each one is a normal
-    thing for a user to hit — an unset axis, a dimension paired with itself, a
-    categorical column, too few samples. None of them is an error worth a
-    traceback.
+    Every bivariate step needs the same four checks, and each one is a normal
+    thing for a user to hit — an unset axis, a dimension paired with itself,
+    too few samples. None of them is an error worth a traceback.
 
-    Returns:
-        (BivariateSet, None) on success, or (None, element) to render instead
+    Raises:
+        NodeProblem: saying what to change
     """
     x_dimension = opts.get("x_dimension")
     if not x_dimension:
-        return None, P("Choose an x dimension.", style=NOTE_STYLE)
+        raise NodeProblem("Choose an x dimension.")
     if x_dimension == y_dimension:
-        return None, P(f"'{y_dimension}' is already the x dimension; pick a "
-                       f"different y dimension.", style=NOTE_STYLE)
+        raise NodeProblem(f"'{y_dimension}' is already the x dimension; pick a "
+                          f"different y dimension.")
 
-    try:
-        density_set = build_set(rows, sample_col, x_dimension, y_dimension, opts)
-    except ValueError:
-        # A density grid needs two numeric axes; a categorical column has no
-        # position on one.
-        return None, P(f"'{y_dimension}' is not numeric, so it cannot be a "
-                       f"density axis. Use the Distributions tool for it.",
-                       style=NOTE_STYLE)
+    density_set = build_set(rows, sample_col, x_dimension, y_dimension, opts)
 
     if not len(density_set):
-        return None, P(f"No paired '{x_dimension}' and '{y_dimension}' values.",
-                       style=NOTE_STYLE)
+        raise NodeProblem(
+            f"No paired '{x_dimension}' and '{y_dimension}' values.")
     if len(density_set) < min_samples:
-        return None, P(f"Need at least {min_samples} samples with paired values "
-                       f"to {purpose}.", style=NOTE_STYLE)
-
-    return density_set, None
+        raise NodeProblem(f"Need at least {min_samples} samples with paired "
+                          f"values to {purpose}.")
+    return density_set
 
 
 def build_set(rows, sample_col, x_dimension, y_dimension, opts) -> BivariateSet:
@@ -107,14 +151,19 @@ def build_set(rows, sample_col, x_dimension, y_dimension, opts) -> BivariateSet:
     spreadsheet actually has them; otherwise falls back to a KDE, since a
     bivariate distribution has no binned form to retreat to.
 
-    Raises:
-        ValueError: if either dimension is not numeric
+    A categorical dimension (any column that isn't all numbers) becomes an
+    axis with one column per category, shared by every sample and never
+    smoothed — a grain counts wholly toward its own category.
     """
+    x_categories = _categories(rows, sample_col, x_dimension, opts)
+    y_categories = _categories(rows, sample_col, y_dimension, opts)
     grouped = paired_by_sample(
         rows, sample_col, x_dimension, y_dimension,
-        opts.get("samples"), opts.get("sigma_in", 1.0))
+        opts.get("samples"), opts.get("sigma_in", 1.0),
+        x_categories=x_categories, y_categories=y_categories)
     if not grouped:
-        return BivariateSet([], [], [], (False, False), 0.0, 0.0, {})
+        return BivariateSet([], [], [], (False, False), 0.0, 0.0, {},
+                            x_categories, y_categories)
 
     pooled_x = [v for entry in grouped.values() for v in entry[0]]
     pooled_y = [v for entry in grouped.values() for v in entry[1]]
@@ -130,27 +179,49 @@ def build_set(rows, sample_col, x_dimension, y_dimension, opts) -> BivariateSet:
     use_x_sigmas = automatic and any(s > 0 for s in pooled_x_sigma)
     use_y_sigmas = automatic and any(s > 0 for s in pooled_y_sigma)
 
-    x_bandwidth = opts.get("x_bandwidth") or float(silverman_bandwidth(pooled_x))
-    y_bandwidth = opts.get("y_bandwidth") or float(silverman_bandwidth(pooled_y))
+    # A categorical axis has no width to smooth by, and no uncertainty column.
+    use_x_sigmas = use_x_sigmas and x_categories is None
+    use_y_sigmas = use_y_sigmas and y_categories is None
+    x_bandwidth = (None if x_categories is not None else
+                   opts.get("x_bandwidth") or float(silverman_bandwidth(pooled_x)))
+    y_bandwidth = (None if y_categories is not None else
+                   opts.get("y_bandwidth") or float(silverman_bandwidth(pooled_y)))
 
     # Pad each axis by whatever kernel it will actually be drawn with, so a
     # grain with a large uncertainty is not clipped at the edge.
     grid = int(opts.get("grid", 128))
-    x_values = axis_grid(pooled_x, pooled_x_sigma if use_x_sigmas else [x_bandwidth],
-                         grid)
-    y_values = axis_grid(pooled_y, pooled_y_sigma if use_y_sigmas else [y_bandwidth],
-                         grid)
+    x_values = (category_axis(len(x_categories)) if x_categories is not None else
+                axis_grid(pooled_x, pooled_x_sigma if use_x_sigmas else [x_bandwidth],
+                          grid))
+    y_values = (category_axis(len(y_categories)) if y_categories is not None else
+                axis_grid(pooled_y, pooled_y_sigma if use_y_sigmas else [y_bandwidth],
+                          grid))
 
     entries = []
     counts = {}
     for sample, (xs, ys, x_sigmas, y_sigmas) in grouped.items():
         entries.append((sample, bivariate_density(
             xs, ys,
-            x_sigmas if use_x_sigmas else x_bandwidth,
-            y_sigmas if use_y_sigmas else y_bandwidth,
+            _widths_for(x_categories, use_x_sigmas, x_sigmas, x_bandwidth),
+            _widths_for(y_categories, use_y_sigmas, y_sigmas, y_bandwidth),
             x_values, y_values, name=sample)))
         counts[sample] = len(xs)
 
     return BivariateSet(entries, x_values, y_values,
                         (use_x_sigmas, use_y_sigmas),
-                        x_bandwidth, y_bandwidth, counts)
+                        x_bandwidth, y_bandwidth, counts,
+                        x_categories, y_categories)
+
+
+def _categories(rows, sample_col, dimension, opts):
+    """The category list for a non-numeric dimension, or None for a numeric one."""
+    if is_numeric_column(rows, dimension):
+        return None
+    return categories_of(rows, sample_col, dimension, opts.get("samples")) or None
+
+
+def _widths_for(categories, use_sigmas, sigmas, bandwidth):
+    """What bivariate_density wants as an axis's kernel: None marks categorical."""
+    if categories is not None:
+        return None
+    return sigmas if use_sigmas else bandwidth

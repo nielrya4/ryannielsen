@@ -184,6 +184,12 @@ class Wizard(Macro):
         status.style.color = "#b00020" if is_error else "#146c2e"
         return self
 
+    def set_submit_text(self, text):
+        """Change the action button's label, e.g. when a dialog switches mode."""
+        self._set_state(submit_text=text)
+        self._get_element('submit').set_text(text)
+        return self
+
     def set_busy(self, busy, busy_text="Working…"):
         submit = self._get_element('submit')
         submit._dom_element.disabled = bool(busy)

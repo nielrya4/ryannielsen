@@ -106,6 +106,11 @@ class LoadingOverlay:
         js.document.body.style.cursor = "wait"
         return self
 
+    def message(self, text):
+        """Change what the curtain says, to report progress through a long task."""
+        self._label.textContent = text
+        return self
+
     def hide(self):
         self._root.style.display = "none"
         js.document.body.style.cursor = ""

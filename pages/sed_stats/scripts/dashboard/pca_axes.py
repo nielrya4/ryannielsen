@@ -14,6 +14,7 @@ from antioch.elements import Div, P
 from plot_lib import bar_trace
 from sed_stats import pca
 
+from .dataset import categories_of, is_numeric_column
 from .plots import make_plot
 from .tables import result_table
 
@@ -24,47 +25,61 @@ NOTE_STYLE = {"color": "#6c757d"}
 AXIS_COLUMNS = ("PC1", "PC2")
 
 
-def build_pca_axes(charts, rows, sample_col, dimensions, opts, set_rows=None):
-    """
-    `dimensions` is the whole list of variables to reduce.
+class AxesProblem(ValueError):
+    """The PCA cannot be fitted with what was chosen; the message says why."""
 
-    Unusually for a builder this has a side effect: it rewrites the
-    spreadsheet. The gallery entry it returns is the record of what was done —
-    which variables went in, and what the axes turned out to mean.
+
+def run_axes(charts, rows, sample_col, dimensions, opts, in_workflow=False):
+    """
+    Fit the grain PCA.
+
+    Returns:
+        (updated_rows, report): a copy of `rows` with PC1 and PC2 filled in
+        (grains missing a variable get blanks), and the element describing the
+        fit. The input rows are not changed.
+
+    Raises:
+        AxesProblem: with fewer than two variables, or no usable grains
     """
     variables = [d for d in dimensions if d not in AXIS_COLUMNS]
     if len(variables) < 2:
-        return P("Choose at least two variables to reduce.", style=NOTE_STYLE)
+        raise AxesProblem("Choose at least two variables to reduce.")
 
     selected = opts.get("samples")
-    complete, matrix = _complete_rows(rows, sample_col, variables, selected)
+    columns = _encode_variables(rows, sample_col, variables, selected)
+    complete, matrix = _complete_rows(rows, sample_col, columns, selected)
     if len(matrix) < 2:
-        return P("No grains have a value for every chosen variable.",
-                 style=NOTE_STYLE)
+        raise AxesProblem("No grains have a value for every chosen variable.")
+    names = [name for column in columns for name in column.names]
+    column_weights = [w for column in columns for w in column.weights]
 
     weights = None
     if opts.get("grain_weighting") == "sample":
         weights = _sample_weights([row for row, _ in complete], sample_col)
 
-    result = pca.grain_pca(matrix, variables=variables, n_components=2,
-                           weights=weights)
-
+    result = pca.grain_pca(matrix, variables=names, n_components=2,
+                           weights=weights, column_weights=column_weights)
     updated = _write_scores(rows, complete, result)
-    if set_rows:
-        set_rows(updated)
 
     scored = len(complete)
     total_rows = len([r for r in rows
                       if selected is None
                       or str(r.get(sample_col, "") or "").strip() in selected])
+    where = ("PC1 and PC2 are now columns in this step's table — the steps "
+             "after it will offer them as dimensions."
+             if in_workflow else
+             "PC1 and PC2 are now columns in the spreadsheet — every other tool "
+             "will offer them as dimensions. To see the grains, use Scatterplot "
+             "with x = PC1 and PC2 as the y dimension; choose \"One plot per "
+             "sample\" to compare samples side by side.")
     wrapper = Div(
         P(f"{scored} of {total_rows} grains scored on "
-          f"{len(variables)} standardized variables. "
+          f"{len(variables)} standardized variables"
+          f"{_encoding_note(columns)}. "
           f"PC1 explains {result.percent(0):.1f}% and PC2 "
           f"{result.percent(1):.1f}% of the variance between grains.",
           style=CAPTION_STYLE),
-        P("PC1 and PC2 are now columns in the spreadsheet — every other tool "
-          "will offer them as dimensions.", style=CAPTION_STYLE),
+        P(where, style=CAPTION_STYLE),
         _loadings_table(result),
     )
     if scored < total_rows:
@@ -72,10 +87,65 @@ def build_pca_axes(charts, rows, sample_col, dimensions, opts, set_rows=None):
                       f"missing a value.", style=NOTE_STYLE))
     if opts.get("scree"):
         wrapper.add(*_scree_section(charts, result))
-    return wrapper
+    return updated, wrapper
 
 
-def _complete_rows(rows, sample_col, variables, selected):
+class _Column:
+    """
+    One chosen variable as it enters the fit.
+
+    A numeric variable is one column. A categorical one is a block of 0/1
+    indicator columns, one per category, each down-weighted by 1/sqrt(k) so the
+    block as a whole counts as a single variable.
+    """
+
+    def __init__(self, variable, categories=None):
+        self.variable = variable
+        self.categories = categories
+        if categories is None:
+            self.names = [variable]
+            self.weights = [1.0]
+        else:
+            self.names = [f"{variable} = {c}" for c in categories]
+            self.weights = [len(categories) ** -0.5] * len(categories)
+
+    def encode(self, raw):
+        """This variable's matrix entries for one grain, or None if unusable."""
+        if raw in ("", None):
+            return None
+        if self.categories is None:
+            try:
+                return [float(raw)]
+            except (TypeError, ValueError):
+                return None
+        value = str(raw).strip()
+        if value not in self.categories:
+            return None
+        return [1.0 if value == c else 0.0 for c in self.categories]
+
+
+def _encode_variables(rows, sample_col, variables, selected):
+    """Numeric variables as themselves; anything else one-hot over its categories."""
+    columns = []
+    for variable in variables:
+        if is_numeric_column(rows, variable):
+            columns.append(_Column(variable))
+        else:
+            columns.append(_Column(variable, categories_of(
+                rows, sample_col, variable, selected)))
+    return columns
+
+
+def _encoding_note(columns):
+    categorical = [c for c in columns if c.categories is not None]
+    if not categorical:
+        return ""
+    count = sum(len(c.categories) for c in categorical)
+    return (f", {len(categorical)} of them categorical and one-hot encoded into "
+            f"{count} columns")
+
+
+def _complete_rows(rows, sample_col, columns, selected):
     """
     Rows usable for the fit, paired with their index in the original table.
 
@@ -89,16 +159,12 @@ def _complete_rows(rows, sample_col, variables, selected):
         if selected is not None and sample not in selected:
             continue
         values = []
-        for variable in variables:
-            raw = row.get(variable, "")
-            if raw in ("", None):
+        for column in columns:
+            encoded = column.encode(row.get(column.variable, ""))
+            if encoded is None:
                 values = None
                 break
-            try:
-                values.append(float(raw))
-            except (TypeError, ValueError):
-                values = None
-                break
+            values.extend(encoded)
         if values is None:
             continue
         complete.append((row, index))

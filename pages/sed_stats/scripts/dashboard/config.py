@@ -38,6 +38,8 @@ MDS_TYPES = {
 MIXTURE_METRICS = {
     "cross_correlation": {"label": "Cross-correlation (R²)",
                           "note": "higher is a better fit"},
+    "likeness": {"label": "Likeness", "note": "higher is a better fit"},
+    "similarity": {"label": "Similarity", "note": "higher is a better fit"},
     "ks": {"label": "KS statistic", "note": "lower is a better fit"},
     "kuiper": {"label": "Kuiper statistic", "note": "lower is a better fit"},
 }
@@ -92,49 +94,13 @@ DEFAULT_POINT_SIZE = "7"
 # modal counts and normalized oxides are reported.
 TERNARY_TOTAL = 100.0
 
-# Toolbar structure: menu label -> a tool key, or a nested dict of the same.
-# The two categories say what a tool consumes, which is the distinction that
-# actually matters when choosing one — a univariate tool takes one dimension at
-# a time, a multivariate tool relates two or more.
-#
-# The Bivariate submenu deliberately mirrors the Univariate list: density,
-# comparison, MDS and mixture exist in both a 1-D and a 2-D form, and the menu
-# should show that rather than hide it in a flat row of ten buttons.
-TOOL_MENU = {
-    "Univariate": {
-        "Distributions": "distributions",
-        "Comparison matrices": "matrix",
-        "MDS": "mds",
-        "Mixture model": "mixture",
-    },
-    "Multivariate": {
-        "Scatterplot": "scatter",
-        "Ternary": "ternary",
-        "PCA": "pca",
-        "Bivariate": {
-            "Density": "bivariate",
-            "Comparison matrices": "bivariate_matrix",
-            "MDS": "bivariate_mds",
-            "Mixture model": "bivariate_mixture",
-        },
-    },
-}
-
-# Every tool, keyed the way TOOL_MENU refers to them. The label here names the
-# tool's own modal and gallery entries; TOOL_MENU chooses how it is worded in
-# the menu, where the category already supplies context.
-TOOLS = {
-    "scatter": "Scatterplot",
-    "ternary": "Ternary",
-    "distributions": "Distributions",
-    "matrix": "Comparison matrices",
-    "mds": "MDS",
-    "mixture": "Mixture model",
-    "pca": "PCA",
-    "bivariate": "Bivariate density",
-    "bivariate_matrix": "Bivariate comparison",
-    "bivariate_mds": "Bivariate MDS",
-    "bivariate_mixture": "Bivariate mixture",
+# Outputs saved before the bivariate tools were folded into their univariate
+# counterparts name the old tool: (tool that now runs it, mode).
+LEGACY_TOOLS = {
+    "bivariate": ("distributions", "bi"),
+    "bivariate_matrix": ("matrix", "bi"),
+    "bivariate_mds": ("mds", "bi"),
+    "bivariate_mixture": ("mixture", "bi"),
 }
 
 # How a PDF/CDF's curve is built. Histograms always bin, whatever this says.

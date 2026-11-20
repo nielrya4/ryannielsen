@@ -323,8 +323,8 @@ class DrivePanel(Macro):
         """
         Raise before a call that is certain to 403.
 
-        The gallery's save buttons exist as soon as Drive is configured, so
-        they can be clicked while signed out or without the Drive scope.
+        The output window's save button exists as soon as Drive is configured, so
+        it can be clicked while signed out or without the Drive scope.
         """
         if not self.session.signed_in:
             raise RuntimeError("Sign in with Google first.")

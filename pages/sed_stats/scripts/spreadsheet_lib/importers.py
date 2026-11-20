@@ -1,8 +1,26 @@
 """Parsers that turn uploaded spreadsheet files into a list of row dicts."""
 import csv
 import io
+from datetime import date, datetime, time
 
 SUPPORTED_EXTENSIONS = (".csv", ".xls", ".xlsx")
+
+
+def _plain(value):
+    """
+    A cell as the sheet holds it. An Excel date cell arrives as a datetime; it becomes the text
+    "2021-01-16" (or "2021-01-16 13:45:00" with a time), which the date-reading tools understand, the
+    grid shows as it is, and a project file can store (a datetime cannot be written to one).
+    """
+    if isinstance(value, datetime):
+        if value.hour or value.minute or value.second or value.microsecond:
+            return value.replace(microsecond=0).isoformat(sep=" ")
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, time):
+        return value.replace(microsecond=0).isoformat()
+    return value
 
 
 def _rows_to_dicts(rows):
@@ -18,7 +36,7 @@ def _rows_to_dicts(rows):
     for row in rows[1:]:
         padded = list(row) + [""] * (len(headers) - len(row))
         result.append({
-            header: "" if value is None else value
+            header: "" if value is None else _plain(value)
             for header, value in zip(headers, padded)
         })
     return result
@@ -36,12 +54,24 @@ def parse_xlsx(content: bytes):
     return _rows_to_dicts([list(row) for row in sheet.iter_rows(values_only=True)])
 
 
+def _xls_value(book, cell):
+    """A cell of an .xls file: a date cell as a datetime (xlrd gives only an Excel serial number)."""
+    import xlrd
+    if cell.ctype == xlrd.XL_CELL_DATE:
+        try:
+            return xlrd.xldate.xldate_as_datetime(cell.value, book.datemode)
+        except (ValueError, xlrd.xldate.XLDateError):
+            return cell.value
+    return cell.value
+
+
 def parse_xls(content: bytes):
     import xlrd
 
     book = xlrd.open_workbook(file_contents=content)
     sheet = book.sheet_by_index(0)
-    return _rows_to_dicts([sheet.row_values(i) for i in range(sheet.nrows)])
+    return _rows_to_dicts([[_xls_value(book, sheet.cell(i, j)) for j in range(sheet.ncols)]
+                           for i in range(sheet.nrows)])
 
 
 def parse_file(filename: str, content):

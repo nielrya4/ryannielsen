@@ -59,6 +59,23 @@ def _alignment(values) -> str:
     return "left"
 
 
+# What the tables built since the last `begin_previews` held, so a block that shows a table (a matrix,
+# a per-sample summary) can have a thumbnail of it without each block saying so. Kept as titles and a
+# few rows, which is all a thumbnail draws.
+_PREVIEWS = []
+PREVIEW_ROWS = 8
+
+
+def begin_previews():
+    """Start noting the tables that are built."""
+    _PREVIEWS.clear()
+
+
+def first_preview():
+    """(titles, rows) of the first table built since `begin_previews`, or None."""
+    return _PREVIEWS[0] if _PREVIEWS else None
+
+
 def result_table(titles, rows, sortable=False):
     """
     A read-only sheet.
@@ -73,6 +90,8 @@ def result_table(titles, rows, sortable=False):
     Returns:
         A Div wrapping the sheet, with `.sheet` on it for the caller.
     """
+    if len(_PREVIEWS) < 20:
+        _PREVIEWS.append(([str(t) for t in titles], [list(r) for r in rows[:PREVIEW_ROWS]]))
     fields = [f"{FIELD_PREFIX}{index}" for index in range(len(titles))]
     columns = []
     for index, (field, title) in enumerate(zip(fields, titles)):

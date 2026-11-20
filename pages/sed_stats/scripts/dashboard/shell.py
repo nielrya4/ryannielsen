@@ -1,19 +1,25 @@
-"""The page frame: header, top-level tabs, toolbar, and the two panels.
+"""The page frame: header, top-level tabs, and the two panels.
 
-Everything here is chrome. The tab bar and toolbar are anchored and only the
-panel bodies scroll, so the app behaves like an editor rather than a document.
+Everything here is chrome. The tab bar is anchored and only the panel bodies scroll, so the
+app behaves like an editor rather than a document.
 """
+import asyncio
+
 from antioch.dom import DOM
 from antioch.elements import Button, Div, H1, Span
 from antioch.event import when
 
 from spreadsheet_lib import SpreadsheetUpload, TabulatorSheet
-from ui_lib import TabItem, TabView, Toolbar
+from ui_lib import TabItem, TabView
 
-from .config import TOOL_MENU
 from .drive import DrivePanel
 from .example_data import generate_example_rows
-from .gallery import Gallery
+from .maps_panel import MapsPanel
+from .project import ProjectPanel
+from .prompt import PromptDialog
+from .recovery import RecoveryStore
+from .tracker import WorkTracker
+from .workflow_panel import WorkflowPanel
 
 # A definite height: Tabulator sizes its virtual viewport from this, and a
 # percentage would resolve against an auto-height parent and collapse.
@@ -44,9 +50,14 @@ class AppShell:
         upload   - SpreadsheetUpload above it
         drive    - DrivePanel beside it; empty and hidden when Google
                    sign-in is not configured
-        toolbar  - Toolbar of tool menus; fill it with set_tool_menu()
-        gallery  - Gallery of generated outputs
-        tabs     - top-level TabView (Outputs first, then Spreadsheet)
+        project  - ProjectPanel: the title-bar Projects button and its dialog
+        tracker  - WorkTracker: unsaved-work marker, recovery copy, autosave
+        recovery - RecoveryStore: the IndexedDB recovery copy
+        workflow_panel - the Workflow tab: the canvas, its tools and blocks, and each block's
+                   output
+        maps     - MapsPanel: the Maps tab — delineate watersheds and fetch gauges and climate,
+                   handing the results to the workflow
+        tabs     - top-level TabView (Workflow, Spreadsheet, then Maps)
     """
 
     def __init__(self, title="Sed/Stats"):
@@ -55,25 +66,53 @@ class AppShell:
         self.table = TabulatorSheet(data=generate_example_rows(), height=TABLE_HEIGHT)
         self.upload = SpreadsheetUpload()
         self.drive = DrivePanel(get_rows=self.table.get_data)
+        # The workflow panel does not exist yet, so its state is fetched lazily.
+        self.project = ProjectPanel(
+            self.drive, get_rows=self.table.get_data,
+            get_workflow=lambda: self.workflow_panel.to_dict())
+
+        @when(self.drive.events.sign_in_change)
+        def on_sign_in_change(sender, usable, *args):
+            self.project.set_enabled(usable)
+            # Whether leaving the page loses work depends on being able to save.
+            self.tracker.changed()
         DOM.add(self._header(title))
-        # Built empty: the tools it opens do not exist until the gallery does,
-        # so main.py fills it in through set_tool_menu once they are wired.
-        self.toolbar = Toolbar(
-            toolbar_style={"background_color": "#34495e"},
-            menu_item_style={"font_size": "14px", "padding": "10px 18px"},
-        )
-        # Cards only offer "Save to Drive" when there is a Drive to save to.
-        self.gallery = Gallery(
-            on_save=self.drive.save_bytes if self.drive.configured else None)
+
+        # Watches the sheet and the workflow for unsaved work: marks the
+        # Projects button, warns before leaving, keeps a recovery copy in
+        # IndexedDB and, if opted in, autosaves the open project.
+        self.recovery = RecoveryStore()
+        self.tracker = WorkTracker(
+            self.table.get_data, lambda: self.workflow_panel.to_dict(), self.project,
+            self.recovery, self.table,
+            drive_usable=lambda: (self.drive.session.signed_in
+                                  and self.drive.session.has_drive_access))
+        self.project.guard = self.tracker.confirm_discard
+        # The workflow's steps are part of the work, so editing them counts.
+        # A step's output lives with its block, so there is nowhere else to look for results.
+        # "Save to Drive" is offered only when there is a Drive to save to.
+        self.workflow_panel = WorkflowPanel(
+            self.table.get_data, on_change=self.tracker.changed,
+            on_save=self.drive.save_bytes if self.drive.configured else None,
+            set_rows=self.table.set_data,
+            on_view_spreadsheet=lambda: self.tabs.set_active(1),
+            on_view_map=self._view_on_map)
+        self.maps = MapsPanel(self.table.get_data, self.workflow_panel)
 
         self.tabs = TabView(fill=True, tabs=[
-            TabItem("Outputs", self._outputs_panel()),
+            TabItem("Workflow", self._workflow_tab()),
             TabItem("Spreadsheet", self._spreadsheet_panel()),
+            TabItem("Maps", Div(self.maps.element, style=dict(PANEL_STYLE))),
         ])
         DOM.add(Div(self.tabs.element, style={
             "flex": "1", "min-height": "0", "padding": "0 16px 16px",
             "display": "flex", "flex-direction": "column",
         }))
+
+    def _view_on_map(self, step_id):
+        """A Watershed block's "View on the map": open the Maps tab and show it."""
+        self.tabs.set_active(2)
+        self.maps.show_block(step_id)
 
     @staticmethod
     def _style_body():
@@ -91,9 +130,13 @@ class AppShell:
     def _header(self, title):
         return Div(
             H1(title, style={"margin": "0", "font-size": "20px"}),
-            # Right-aligned by its own margin-left:auto, and empty and hidden
-            # when Google sign-in is not configured.
-            self.drive.account_element,
+            # Right-aligned together. The Projects button comes first, so it
+            # sits to the left of the signed-in email; both are hidden when
+            # Google sign-in is not configured or the user is signed out.
+            Div(self.project.button_element, self.drive.account_element, style={
+                "margin-left": "auto", "display": "flex",
+                "align-items": "center", "gap": "12px",
+            }),
             style={
                 "flex-shrink": "0", "padding": "10px 16px",
                 "background-color": "#2c3e50", "color": "#fff",
@@ -101,38 +144,33 @@ class AppShell:
             },
         )
 
-    def set_tool_menu(self, tools):
-        """
-        Point the toolbar's menu entries at the tools they open.
-
-        TOOL_MENU holds tool *keys*; this swaps each for a callback that opens
-        that tool's wizard, leaving the nesting as written.
-        """
-        def resolve(node):
-            if isinstance(node, dict):
-                return {label: resolve(child) for label, child in node.items()}
-            tool = tools[node]
-            return lambda tool=tool: tool.open()
-
-        self.toolbar.update_menu(resolve(TOOL_MENU))
-        return self
-
     def _row_controls(self):
         """
-        Add and delete rows.
+        Row and column buttons, and undo.
 
-        Tabulator has no built-in affordance for either, and a spreadsheet the
-        user is expected to edit needs both. Deletion works on whatever the
-        current selection touches — click a row number, or drag a range.
+        Tabulator has no built-in affordance for these, and a spreadsheet the user is
+        expected to edit needs them. Deleting works on whatever the current selection
+        touches — click a row number or a column header, or drag a range. The same things,
+        and renaming a column, are on the right-click menus of the rows and the headers.
         """
         add = Button("Add row", style=ROW_BUTTON_STYLE)
+        add_column = Button("Add column", style=ROW_BUTTON_STYLE)
         delete = Button("Delete selected rows", style=ROW_BUTTON_STYLE)
+        delete_columns = Button("Delete selected columns", style=ROW_BUTTON_STYLE)
+        undo = Button("Undo", style=ROW_BUTTON_STYLE)
+        redo = Button("Redo", style=ROW_BUTTON_STYLE)
         status = Span("", style=STATUS_STYLE)
+        self.table.on_message = status.set_text
+        self.table.prompt = PromptDialog().ask
 
         @when(add.events.click)
         def on_add(sender, *args):
             self.table.add_row()
             status.set_text("Row added.")
+
+        @when(add_column.events.click)
+        def on_add_column(sender, *args):
+            asyncio.ensure_future(self.table.request_add_column())
 
         @when(delete.events.click)
         def on_delete(sender, *args):
@@ -142,7 +180,23 @@ class AppShell:
                 if removed else
                 "Nothing selected — click a row number, or drag across cells.")
 
-        return Div(add, delete, status, style={
+        @when(delete_columns.events.click)
+        def on_delete_columns(sender, *args):
+            removed = self.table.delete_selected_columns()
+            status.set_text(
+                f"Deleted {removed} column{'s' if removed != 1 else ''}."
+                if removed else
+                "Nothing selected — click a column header, or drag across cells.")
+
+        @when(undo.events.click)
+        def on_undo(sender, *args):
+            status.set_text("Undone." if self.table.undo() else "Nothing to undo.")
+
+        @when(redo.events.click)
+        def on_redo(sender, *args):
+            status.set_text("Redone." if self.table.redo() else "Nothing to redo.")
+
+        return Div(add, add_column, delete, delete_columns, undo, redo, status, style={
             "display": "flex", "align-items": "center", "flex-wrap": "wrap",
             "gap": "4px",
         })
@@ -165,11 +219,6 @@ class AppShell:
             style=PANEL_STYLE,
         )
 
-    def _outputs_panel(self):
-        return Div(
-            Div(self.toolbar.element, style={"flex-shrink": "0",
-                                             "margin-bottom": "12px"}),
-            # Only this scrolls.
-            Div(self.gallery.element, style=SCROLL_STYLE),
-            style=PANEL_STYLE,
-        )
+    def _workflow_tab(self):
+        return Div(Div(self.workflow_panel.element, style=SCROLL_STYLE),
+                   style=PANEL_STYLE)

@@ -3,66 +3,12 @@ import numpy as np
 
 from antioch.elements import Div, P
 
-from plot_lib import line_trace, marker_trace, series_color
+from plot_lib import line_trace, marker_trace
 from sed_stats import mds
 
-from .config import METRICS, MDS_TYPES
-from .dataset import series_for
 from .plots import make_plot
 
 CAPTION_STYLE = {"font-size": "13px", "color": "#555", "margin": "0 0 6px 0"}
-
-
-def build_mds(charts, rows, sample_col, dimension, opts):
-    metric = opts["metric"]
-    _, series = series_for(rows, sample_col, dimension,
-                           mds.expected_form(metric), opts)
-    if len(series) < 3:
-        return P("Need at least three samples with data for MDS.",
-                 style={"color": "#6c757d"})
-
-    non_metric = opts["mds_type"] == "non_metric"
-    points, stress, matrix, embedding = mds.mds_function(series, metric, non_metric)
-
-    wrapper = Div(
-        P(f"{MDS_TYPES[opts['mds_type']]} on {METRICS[metric]['label']} "
-          f"dissimilarity — Kruskal stress-1: {stress:.4f}", style=CAPTION_STYLE),
-        Div(make_plot(charts, _map_traces(points), f"{dimension} — MDS",
-                      "Dimension 1", "Dimension 2",
-                      filename=f"{dimension}_mds").element),
-    )
-
-    if opts["shepard"]:
-        wrapper.add(*_shepard_section(charts, dimension, matrix, embedding,
-                                      non_metric, stress))
-    return wrapper
-
-
-def _map_traces(points):
-    # Dashed segments joining each sample to its nearest neighbor. A None
-    # breaks the line between segments; Plotly reads array entries as values,
-    # so a non-numeric entry is simply a gap.
-    nn_x, nn_y = [], []
-    for point in points:
-        if point.nearest_neighbor is not None:
-            nn_x.extend([point.x, point.nearest_neighbor[0], None])
-            nn_y.extend([point.y, point.nearest_neighbor[1], None])
-
-    traces = []
-    if nn_x:
-        traces.append({
-            "type": "scatter", "mode": "lines", "x": nn_x, "y": nn_y,
-            "name": "Nearest neighbor",
-            "line": {"color": "#999", "width": 1, "dash": "dash"},
-            "connectgaps": False, "hoverinfo": "skip",
-        })
-    # Points are added after the connectors so they draw on top.
-    traces.extend(
-        marker_trace([p.x], [p.y], p.label,
-                     color=series_color(i, len(points)), labels=[p.label])
-        for i, p in enumerate(points)
-    )
-    return traces
 
 
 def _shepard_section(charts, dimension, matrix, embedding, non_metric, stress):

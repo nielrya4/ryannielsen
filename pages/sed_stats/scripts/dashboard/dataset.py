@@ -146,6 +146,49 @@ def is_numeric_column(rows, column):
     return seen
 
 
+DATE_SCAN = 200           # values read before a column is judged
+DATE_HEAD = 8             # a column is first judged on this many values, so a column of text is dropped cheaply
+DATE_SHARE = 0.9          # the share of a column's values that must read as dates for it to count as one
+
+
+def is_date_column(rows, column):
+    """
+    Whether the column holds dates: at least DATE_SHARE of its non-empty values (the first DATE_SCAN of
+    them) read as dates, and none is a plain number (a year or an Excel serial number is not taken for
+    one). A few unreadable entries do not stop a column of dates being offered; the block that uses it
+    leaves them out and says so. The order of day and month is not guessed: the column counts if it
+    reads month first, or day first, for that share of its values.
+
+    This runs each time a dialog opens, and reading a value that is not a date is slow (every format
+    is tried and fails), so the first DATE_HEAD values decide whether the rest are worth reading.
+    """
+    from sed_stats import dates as dt
+    values = []
+    for row in rows:
+        value = row.get(column, "")
+        if value in ("", None):
+            continue
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return False
+        values.append(value)
+        if len(values) >= DATE_SCAN:
+            break
+    if not values:
+        return False
+    head = values[:DATE_HEAD]
+    for day_first in (False, True):
+        if sum(dt.parse_date(v, day_first) is not None for v in head) < DATE_SHARE * len(head):
+            continue
+        if sum(dt.parse_date(v, day_first) is not None for v in values) >= DATE_SHARE * len(values):
+            return True
+    return False
+
+
+def date_columns(rows, columns):
+    """The subset of `columns` holding dates (see `is_date_column`)."""
+    return {column for column in columns if is_date_column(rows, column)}
+
+
 def numeric_columns(rows, columns):
     """The subset of `columns` holding numbers."""
     return {column for column in columns if is_numeric_column(rows, column)}
@@ -179,8 +222,17 @@ def pairs_by_sample(rows, sample_col, attribute, uncertainty_col, only_samples=N
     return grouped
 
 
+def categories_of(rows, sample_col, attribute, only_samples=None):
+    """Sorted distinct values of a categorical attribute among the chosen samples."""
+    return sorted({str(v).strip()
+                   for values in values_by_sample(
+                       rows, sample_col, attribute, only_samples).values()
+                   for v in values})
+
+
 def paired_by_sample(rows, sample_col, x_attribute, y_attribute,
-                     only_samples=None, sigma_in=1.0):
+                     only_samples=None, sigma_in=1.0,
+                     x_categories=None, y_categories=None):
     """
     Paired x/y measurements and their uncertainties, grouped by sample.
 
@@ -188,15 +240,23 @@ def paired_by_sample(rows, sample_col, x_attribute, y_attribute,
     row missing either one is dropped — unlike the univariate path, where each
     column stands alone.
 
+    A categorical attribute is named by passing its category list as
+    `x_categories` / `y_categories`: its values come back as positions in that
+    list, with an uncertainty of 0, and no uncertainty column is looked for.
+
     Returns:
         {sample: (xs, ys, x_sigmas, y_sigmas)} with equal-length lists
 
     Raises:
-        ValueError: if either attribute is not numeric
+        ValueError: if an attribute not declared categorical is not numeric
     """
     keys = list(rows[0].keys()) if rows else []
-    x_uncertainty, x_level = find_uncertainty_column(keys, x_attribute)
-    y_uncertainty, y_level = find_uncertainty_column(keys, y_attribute)
+    x_position = None if x_categories is None else {c: i for i, c in enumerate(x_categories)}
+    y_position = None if y_categories is None else {c: i for i, c in enumerate(y_categories)}
+    x_uncertainty, x_level = ((None, None) if x_position is not None
+                              else find_uncertainty_column(keys, x_attribute))
+    y_uncertainty, y_level = ((None, None) if y_position is not None
+                              else find_uncertainty_column(keys, y_attribute))
     x_scale = x_level or sigma_in or 1.0
     y_scale = y_level or sigma_in or 1.0
 
@@ -220,10 +280,16 @@ def paired_by_sample(rows, sample_col, x_attribute, y_attribute,
         if x_raw in ("", None) or y_raw in ("", None):
             continue
         try:
-            x_value, y_value = float(x_raw), float(y_raw)
+            x_value = (float(x_position[str(x_raw).strip()]) if x_position is not None
+                       else float(x_raw))
+            y_value = (float(y_position[str(y_raw).strip()]) if y_position is not None
+                       else float(y_raw))
+        except KeyError:
+            continue  # a category outside the chosen samples
         except (TypeError, ValueError):
             raise ValueError(
-                f"'{x_attribute}' and '{y_attribute}' must both be numeric")
+                f"'{x_attribute}' and '{y_attribute}' must both be numeric "
+                f"or declared categorical")
 
         entry = grouped.setdefault(sample, ([], [], [], []))
         entry[0].append(x_value)

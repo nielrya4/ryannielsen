@@ -754,6 +754,96 @@ class Map(Macro):
 
         return layer
 
+    def _create_image_overlay_layer(self, data_url, south, west, north, east,
+                                    opacity=1.0, name=None, add_to_control=True,
+                                    fit_bounds=False):
+        """
+        Add a PNG data URL as a Leaflet image overlay, pixels left unsmoothed.
+
+        Returns:
+            the Leaflet ImageOverlay layer, or None if the map is not ready
+        """
+        map_instance = self._get_state('map_instance')
+        if not map_instance:
+            return None
+
+        js_bounds = js.Array.new()
+        sw_corner = js.Array.new()
+        sw_corner.push(south)
+        sw_corner.push(west)
+        ne_corner = js.Array.new()
+        ne_corner.push(north)
+        ne_corner.push(east)
+        js_bounds.push(sw_corner)
+        js_bounds.push(ne_corner)
+
+        overlay_options = js.Object.new()
+        overlay_options.opacity = opacity
+        overlay_options.className = 'raster-overlay'
+
+        layer = js.L.imageOverlay(data_url, js_bounds, overlay_options).addTo(map_instance)
+
+        try:
+            img_element = layer.getElement()
+            if img_element:
+                img_element.style.imageRendering = 'pixelated'
+        except Exception:
+            pass
+
+        layers = self._get_state('layers')
+        layers.append(layer)
+        self._set_state(layers=layers)
+
+        if add_to_control and name:
+            self._add_to_layer_control(layer, name)
+
+        if fit_bounds:
+            try:
+                map_instance.fitBounds(js_bounds)
+            except Exception:
+                pass
+
+        return layer
+
+    def add_rgba_overlay(self, rgba, bounds, opacity=1.0, name=None, add_to_control=True,
+                         fit_bounds=False):
+        """
+        Draw an in-memory image — a DEM shaded by elevation, a watershed mask — over the map
+        without a GeoTIFF file.
+
+        Args:
+            rgba: a (height, width, 4) uint8 NumPy array (row 0 is the north edge); built by the
+                caller, so a million cells cost one array operation rather than a Python loop
+            bounds: (south, west, north, east) of the image, in degrees
+            opacity: layer opacity (0-1)
+            name: layer name for the layer control
+            add_to_control: list the layer in the layer control
+            fit_bounds: zoom the map to the image
+
+        Returns:
+            the Leaflet ImageOverlay layer, or None if the map is not ready
+        """
+        map_instance = self._get_state('map_instance')
+        if not map_instance:
+            return None
+
+        height, width = rgba.shape[0], rgba.shape[1]
+        if not width or not height:
+            return None
+
+        from pyodide.ffi import to_js
+        canvas = js.document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        ctx = canvas.getContext('2d')
+        pixels = js.Uint8ClampedArray.new(to_js(rgba.astype('uint8').tobytes()).buffer)
+        ctx.putImageData(js.ImageData.new(pixels, width, height), 0, 0)
+
+        south, west, north, east = bounds
+        return self._create_image_overlay_layer(
+            canvas.toDataURL('image/png'), south, west, north, east,
+            opacity=opacity, name=name, add_to_control=add_to_control, fit_bounds=fit_bounds)
+
     def add_geotiff(self, url, name=None, opacity=1.0, colormap=None, add_to_control=True):
         """
         Add a GeoTIFF raster overlay to the map by converting it to a PNG image overlay.

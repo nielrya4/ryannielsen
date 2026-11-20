@@ -140,12 +140,21 @@ window.__sedStatsGoogle = (function () {
       // callback, so a second would strand the first waiting forever.
       if (pending) pending.reject(new Error("superseded by a new sign-in"));
       pending = { resolve: resolve, reject: reject };
-      try {
-        client().requestAccessToken({ prompt: interactive ? "consent" : "" });
-      } catch (e) {
-        pending = null;
-        reject(e);
-      }
+      // Google opens a popup and focuses it, which makes the browser fire
+      // focus/blur events at once on whatever had focus. Antioch wires Python
+      // listeners to almost every element, so doing that here, still inside
+      // the Python call that started the sign-in, re-enters Python from within
+      // Python — which Pyodide aborts on. A fresh task makes it an ordinary
+      // event, like a click. A 0 ms delay keeps the click's user activation,
+      // so the popup blocker still lets the popup open.
+      setTimeout(function () {
+        try {
+          client().requestAccessToken({ prompt: interactive ? "consent" : "" });
+        } catch (e) {
+          if (pending) { pending = null; }
+          reject(e);
+        }
+      }, 0);
     });
   }
 
